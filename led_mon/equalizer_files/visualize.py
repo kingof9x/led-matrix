@@ -20,6 +20,8 @@ from led_mon.drawing import DrawingThread
 from led_mon.shared_state import discover_led_devices
 from led_mon.patterns import id_patterns
 from led_mon.platform_utils import IS_WINDOWS
+from led_mon.commands import Commands, send_command
+from led_mon.serial_ports import open_port
 import queue
 
 # External Dependencies
@@ -27,6 +29,7 @@ import numpy as np
 from scipy.signal import butter, sosfiltfilt
 if IS_WINDOWS:
     # WASAPI loopback capture of the default output device
+    import soundcard as sc
     sd = None
     Pulse = None
 else:
@@ -54,6 +57,9 @@ class DeviceType(Enum):
     SINK = 2
 
 SOURCE_CHECK_INTERVAL_SEC = 1
+# Windows: how often to re-check the default output device, and when captured audio counts as stale
+DEFAULT_DEVICE_CHECK_SEC = 3
+STALE_AUDIO_SEC = 0.25
 DEFAULT_ZERO_FRAME_NOTIFY_DELAY_SEC = 4.0
 DEFAULT_SILENT_PULSE_AFTER_SEC = 12.0
 DEFAULT_SILENT_PULSE_PERIOD_SEC = 3.8
@@ -74,6 +80,10 @@ PACTL_APP = shutil.which('pactl')
 
 def has_inputmodule_control():
     return bool(INPUTMODULE_CONTROL_APP and Path(INPUTMODULE_CONTROL_APP).is_file())
+
+def can_draw_equalizer():
+    # On Windows the equalizer draws through the app's own serial handle and doesn't need inputmodule-control
+    return IS_WINDOWS or has_inputmodule_control()
 
 # Pre-compute bandpass filters (used in python file mode)
 filters = []
@@ -160,6 +170,9 @@ def get_notification_pattern(source):
         return 'gradient'
     
 def draw_source_change_cue(source):
+    if IS_WINDOWS:
+        draw_source_change_cue_native(source)
+        return
     if not has_inputmodule_control():
         return
     pattern = get_notification_pattern(source)
@@ -189,6 +202,47 @@ def draw_source_change_cue(source):
                 if cmd_2:
                     subprocess.call(cmd_2, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                     
+# Pattern ids from inputmodule-rs (inputmodule-control led-matrix --pattern)
+PATTERN_IDS = {'gradient': 1, 'zigzag': 4, 'all-on': 5}
+
+def get_windows_notification_pattern(name):
+    name = name.lower()
+    if 'headphone' in name or 'headset' in name or 'audio expansion' in name:
+        return 'zigzag'
+    if 'speaker' in name:
+        return 'all-on'
+    return 'gradient'
+
+def draw_source_change_cue_native(source):
+    # Windows: send the pattern over the already-open (shared) serial handles
+    pattern = get_windows_notification_pattern(source)
+    devices = discover_led_devices() or []
+    with device_lock:
+        if shared_state.id_key_press_active:
+            return
+        for _, port_name in devices:
+            try:
+                s = open_port(port_name)
+                try:
+                    for _ in range(3):
+                        send_command(s, Commands.Pattern, parameters=[PATTERN_IDS[pattern]])
+                finally:
+                    s.close()
+            except Exception as e:
+                log.debug(f"Could not draw source change cue on {port_name}: {e}")
+
+def eq_grid(levels):
+    """Same picture as `inputmodule-control led-matrix --eq`: bars growing up and down from the middle row."""
+    grid = np.zeros((9, 34), dtype=int)
+    row = 34 // 2
+    for col, val in enumerate(levels[:9]):
+        val = max(0, min(34, int(val)))
+        above = val // 2
+        below = val - above
+        grid[col, row:row + above] = 0xFF
+        grid[col, row - below:row] = 0xFF
+    return grid
+
 def get_default_device(dev_type: DeviceType):
     with Pulse() as pulse_tmp:  # Temporary connection to query
         server_info = pulse_tmp.server_info()
@@ -198,6 +252,89 @@ def get_default_device(dev_type: DeviceType):
             else None
         return new_dev
     
+def _com_init_mta():
+    # soundcard uses COM; each thread that touches it needs COM initialised
+    try:
+        import ctypes
+        COINIT_MULTITHREADED = 0x0
+        ctypes.windll.ole32.CoInitializeEx(None, COINIT_MULTITHREADED)
+    except Exception:
+        pass
+
+class WasapiCapture():
+    """Windows audio capture feeding Equalizer.audio_buffer, like the sounddevice callback does on Linux.
+
+    playback: WASAPI loopback of the default output. The default output is re-checked every few seconds,
+    so switching from speakers to headphones is followed. microphone: the default (or named) microphone.
+    """
+
+    def __init__(self, equalizer, input_mode, input_device=None):
+        self.eq = equalizer
+        self.input_mode = input_mode
+        self.input_device = input_device
+        self.generation = 0
+        self.stopped = threading.Event()
+        self.current_id = None
+        self._error_logged = False
+
+    def __enter__(self):
+        threading.Thread(target=self._supervise, daemon=True).start()
+        return self
+
+    def __exit__(self, *exc):
+        self.stopped.set()
+        return False
+
+    def _active(self):
+        return not self.stopped.is_set() and not self.eq.done
+
+    def _resolve_source(self):
+        if self.input_mode == 'playback':
+            speaker = sc.default_speaker()
+            return sc.get_microphone(speaker.id, include_loopback=True), speaker.name
+        mic = sc.get_microphone(self.input_device) if self.input_device else sc.default_microphone()
+        return mic, mic.name
+
+    def _supervise(self):
+        _com_init_mta()
+        while self._active():
+            try:
+                source, name = self._resolve_source()
+                if source.id != self.current_id:
+                    first = self.current_id is None
+                    self.current_id = source.id
+                    self.generation += 1
+                    log.info(f"Equalizer capturing from {name}")
+                    threading.Thread(target=self._capture, args=(source, self.generation), daemon=True).start()
+                    if not first and self.input_mode == 'playback':
+                        draw_source_change_cue(name)
+                self._error_logged = False
+            except Exception as e:
+                if not self._error_logged:
+                    self._error_logged = True
+                    log.warning(f"Equalizer could not open the {self.input_mode} audio device: {e}")
+                self.current_id = None
+            self.stopped.wait(DEFAULT_DEVICE_CHECK_SEC)
+
+    def _capture(self, source, generation):
+        # A capture thread can block while nothing plays, so a device change starts a new thread
+        # and an outdated one exits when it next wakes up.
+        _com_init_mta()
+        try:
+            with source.recorder(samplerate=SAMPLE_RATE, blocksize=CHUNK_SIZE) as recorder:
+                while self._active() and generation == self.generation:
+                    data = recorder.record(numframes=CHUNK_SIZE)
+                    if generation != self.generation:
+                        break
+                    with self.eq.buffer_lock:
+                        self.eq.audio_buffer = np.asarray(data, dtype=np.float32)
+                        self.eq.audio_buffer_ts = time.monotonic()
+        except Exception as e:
+            log.warning(f"Equalizer audio capture stopped: {e}")
+            if generation == self.generation:
+                # Let the supervisor reopen the device on its next check
+                self.current_id = None
+
 class Equalizer():
     
     def __init__(self, device_location):
@@ -205,6 +342,7 @@ class Equalizer():
         self.device_name = None
         self.last_known_sink = None
         self.audio_buffer = np.zeros((CHUNK_SIZE, 2), dtype=np.float32)
+        self.audio_buffer_ts = time.monotonic()
         self.buffer_lock = threading.Lock()
         self.queue = queue.Queue(2)
         self.drawing_thread = DrawingThread(device_location, self.queue)
@@ -293,6 +431,14 @@ class Equalizer():
             log.debug(f"Audio callback status ({self.device_name or 'unknown'}): {status}")
         with self.buffer_lock:
             self.audio_buffer = indata.copy()
+            self.audio_buffer_ts = time.monotonic()
+
+    def draw_eq_levels(self, cmd, levels):
+        if IS_WINDOWS:
+            # inputmodule-control can't open a COM port this app already holds, so draw through our own handle
+            self.queue_frame(eq_grid(levels), False)
+        else:
+            subprocess.call(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         
     def draw_inverted_silence_pulse(self, elapsed_sec, pulse_period_sec, reveal_sec):
         pulse_period_sec = clamp_positive_float(pulse_period_sec, DEFAULT_SILENT_PULSE_PERIOD_SEC)
@@ -345,7 +491,7 @@ class Equalizer():
         silent_pulse_reveal_sec=DEFAULT_SILENT_PULSE_REVEAL_SEC,
     ):
         self.device_name = device_name
-        if not has_inputmodule_control():
+        if not can_draw_equalizer():
             log.error("The executable file inputmodule-control was not found on the executable Path. The equalizer will not run.")
             self.stop()
             return False
@@ -373,44 +519,50 @@ class Equalizer():
             activity_resume_threshold = max(26, silence_level_sum_threshold + 12)
             activity_resume_hold_sec = 0.30
 
-        if input_mode == 'playback':
+        # Windows has no PulseAudio/PipeWire monitor source to keep in sync; WasapiCapture follows the default output
+        if input_mode == 'playback' and not IS_WINDOWS:
             self.force_monitor_source()
         device_write_lock = get_device_write_lock(device_name)
 
-        stream_device = resolve_input_stream_device(input_mode, input_device)
-        stream_channels = 2
-        try:
-            if stream_device != 'default':
-                device_info = sd.query_devices(stream_device, 'input')
-                stream_channels = 2 if int(device_info.get('max_input_channels', 1)) >= 2 else 1
-            elif input_mode == 'microphone':
-                default_info = sd.query_devices(kind='input')
-                stream_channels = 2 if int(default_info.get('max_input_channels', 1)) >= 2 else 1
-        except Exception as e:
-            log.warning(f"Could not query input channels for '{stream_device}', falling back to mono: {e}")
-            stream_channels = 1
+        if IS_WINDOWS:
+            # WASAPI loopback of the default output (or the microphone), following default-device changes
+            stream_device = 'default speaker loopback' if input_mode == 'playback' else (input_device or 'default microphone')
+            stream = WasapiCapture(self, input_mode, input_device)
+        else:
+            stream_device = resolve_input_stream_device(input_mode, input_device)
+            stream_channels = 2
+            try:
+                if stream_device != 'default':
+                    device_info = sd.query_devices(stream_device, 'input')
+                    stream_channels = 2 if int(device_info.get('max_input_channels', 1)) >= 2 else 1
+                elif input_mode == 'microphone':
+                    default_info = sd.query_devices(kind='input')
+                    stream_channels = 2 if int(default_info.get('max_input_channels', 1)) >= 2 else 1
+            except Exception as e:
+                log.warning(f"Could not query input channels for '{stream_device}', falling back to mono: {e}")
+                stream_channels = 1
 
-        def make_stream(selected_device, channels):
-            return sd.InputStream(
-                samplerate=SAMPLE_RATE,
-                channels=channels,
-                blocksize=CHUNK_SIZE,
-                callback=self.audio_callback,
-                device=selected_device
-            )
+            def make_stream(selected_device, channels):
+                return sd.InputStream(
+                    samplerate=SAMPLE_RATE,
+                    channels=channels,
+                    blocksize=CHUNK_SIZE,
+                    callback=self.audio_callback,
+                    device=selected_device
+                )
 
-        try:
-            stream = make_stream(stream_device, stream_channels)
-        except Exception as e:
-            if stream_device != 'default':
-                log.warning(f"Unable to open input device '{stream_device}', retrying with default input: {e}")
-                stream_device = 'default'
-                stream_channels = 2 if input_mode == 'playback' else 1
+            try:
                 stream = make_stream(stream_device, stream_channels)
-            else:
-                log.error(f"Unable to open equalizer input stream: {e}")
-                self.stop()
-                return False
+            except Exception as e:
+                if stream_device != 'default':
+                    log.warning(f"Unable to open input device '{stream_device}', retrying with default input: {e}")
+                    stream_device = 'default'
+                    stream_channels = 2 if input_mode == 'playback' else 1
+                    stream = make_stream(stream_device, stream_channels)
+                else:
+                    log.error(f"Unable to open equalizer input stream: {e}")
+                    self.stop()
+                    return False
 
         last_nonzero_frame_ts = time.monotonic()
         pulse_phase_anchor_ts = last_nonzero_frame_ts
@@ -436,6 +588,10 @@ class Equalizer():
             while not self.done:
                 with self.buffer_lock:
                     buffer_snapshot = self.audio_buffer.copy()
+                    buffer_age = time.monotonic() - self.audio_buffer_ts
+                if IS_WINDOWS and buffer_age > STALE_AUDIO_SEC:
+                    # WASAPI loopback delivers nothing while no audio plays; don't keep showing the last chunk
+                    buffer_snapshot = np.zeros_like(buffer_snapshot)
                 if buffer_snapshot.ndim == 1:
                     chunk = buffer_snapshot
                 else:
@@ -486,7 +642,7 @@ class Equalizer():
                                     idle_mode_started_ts = None
                                     active_candidate_started_ts = None
                                     with device_write_lock:
-                                        subprocess.call(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                        self.draw_eq_levels(cmd, levels)
                                 else:
                                     render_silent_pulse(now)
                             else:
@@ -498,7 +654,7 @@ class Equalizer():
                             idle_mode = None
                             idle_mode_started_ts = None
                             with device_write_lock:
-                                subprocess.call(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                self.draw_eq_levels(cmd, levels)
                     else:
                         active_candidate_started_ts = None
                         silence_sec = now - last_nonzero_frame_ts
@@ -538,12 +694,12 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         '--serial-dev-left',
-        default='/dev/ttyACM0',   # ← customize these defaults or override via args
+        default=None if IS_WINDOWS else '/dev/ttyACM0',   # ← customize these defaults or override via args
         help="Serial device for left channel"
     )
     parser.add_argument(
         '--serial-dev-right',
-        default='/dev/ttyACM1',
+        default=None if IS_WINDOWS else '/dev/ttyACM1',
         help="Serial device for right channel"
     )
     args = parser.parse_args()
@@ -552,12 +708,12 @@ if __name__ == '__main__':
 
     if args.channel == 'left':
         channel = 0  # left = column 0 in stereo buffer
-        serial_dev = args.serial_dev_left
-        location = devices[0][0] if len(devices) > 0 else None
+        serial_dev = args.serial_dev_left or (devices[0][1] if len(devices) > 0 else None)
+        location = (devices[0][0] or devices[0][1]) if len(devices) > 0 else None
     else:
         channel = 1  # right = column 1
-        serial_dev = args.serial_dev_right
-        location = devices[1][0] if len(devices) > 1 else None
+        serial_dev = args.serial_dev_right or (devices[1][1] if len(devices) > 1 else None)
+        location = (devices[1][0] or devices[1][1]) if len(devices) > 1 else None
 
     use_external_filter = args.use_easyeffects
     if location is not None:
@@ -567,6 +723,7 @@ if __name__ == '__main__':
             eq.cleanup()
             sys.exit(0)
         signal.signal(signal.SIGINT, stop_and_exit )
-        signal.signal(signal.SIGTERM, stop_and_exit)
+        if hasattr(signal, 'SIGTERM') and not IS_WINDOWS:
+            signal.signal(signal.SIGTERM, stop_and_exit)
     else:
         log.error(f"LED matrix device {serial_dev} not found. Please check your connections and try again.")

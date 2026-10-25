@@ -4,6 +4,7 @@ from statistics import mean
 # Internal dependencies
 from led_mon.patterns import letters_small
 from led_mon import drawing
+from led_mon.platform_utils import IS_WINDOWS
 
 # External dependenciees
 import psutil
@@ -20,6 +21,11 @@ MAX_FAN_SPEED = 6_000
 class TemperatureMonitor:
     @staticmethod
     def get():
+        if IS_WINDOWS:
+            # psutil can't read sensors on Windows; use Framework's framework_tool instead
+            from led_mon.framework_tool import thermal
+            temps = thermal.get()[0]
+            return [min(1.0, max(0.0, t / TEMP_REF)) for t in temps][:8]
         temps = []
         sensors = psutil.sensors_temperatures()
         for _, entries in sensors.items():
@@ -31,6 +37,12 @@ class TemperatureMonitor:
 class FanSpeedMonitor:
     @staticmethod
     def get():
+        if IS_WINDOWS:
+            from led_mon.framework_tool import thermal
+            speeds = thermal.get()[1]
+            # Always two values, so missing readings draw empty bars
+            speeds = (list(speeds) + [0, 0])[:2]
+            return [min(1.0, s / MAX_FAN_SPEED) for s in speeds]
         fans = psutil.sensors_fans()
         speeds = []
         for _, entries in fans.items():
