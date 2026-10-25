@@ -1,5 +1,6 @@
 # Layout editor: converting between pages and the config's quadrant lists, and the control channel
 import os
+import uuid
 
 import pytest
 import yaml
@@ -101,9 +102,16 @@ def test_snapshot_files_skip_raw_files():
     assert not any(f.endswith("_raw.json") for f in files)
 
 
+def unique_control_address(monkeypatch):
+    # A listener from an earlier test keeps its pipe; Windows refuses a second pipe with the same name
+    name = control.address() + "-" + uuid.uuid4().hex[:8]
+    monkeypatch.setattr(control, "address", lambda: name)
+
+
 def test_control_channel_round_trip(monkeypatch, tmp_path):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    unique_control_address(monkeypatch)
     assert control.request({"cmd": "status"}) is None  # nothing running yet
     seen = []
 
@@ -152,6 +160,7 @@ def test_monitor_shows_preview_and_reloads(monkeypatch, tmp_path):
 
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    unique_control_address(monkeypatch)
     drawn = {"left": queue.Queue(), "right": queue.Queue()}
 
     class FakeDrawingThread:
