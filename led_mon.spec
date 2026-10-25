@@ -19,7 +19,7 @@ datas = [
 ]
 
 hiddenimports = [
-    'yaml', 'pynput', 'requests', 'zoneinfo', 'iplocate', 'dotenv',
+    'yaml', 'requests', 'zoneinfo', 'iplocate', 'dotenv',
     'scipy', 'scipy._distributor_init', 'scipy._lib.messagestream', 'scipy.special._ufuncs',
     'scipy.linalg._flapack', 'scipy.signal',
     # Plugins are loaded from files at runtime, so PyInstaller can't see what they import
@@ -27,14 +27,14 @@ hiddenimports = [
     'led_mon.equalizer_files.visualize',
     # The layout editor is imported only when started with --edit-layout
     'led_mon.rendering', 'led_mon.control', 'led_mon.editor', 'led_mon.editor.window', 'led_mon.editor.preview',
-    'led_mon.editor.layout', 'led_mon.editor.catalog', 'tkinter', 'tkinter.ttk', 'tkinter.messagebox',
+    'led_mon.editor.layout', 'led_mon.editor.catalog', 'led_mon.hotkeys', 'tkinter', 'tkinter.ttk', 'tkinter.messagebox',
 ]
 
 icon = None
 if IS_WINDOWS:
     hiddenimports += [
         'soundcard', 'pystray', 'pystray._win32', 'PIL', 'PIL.ImageTk', 'wmi', 'win32com', 'win32com.client', 'pythoncom',
-        'pynput.keyboard._win32', 'pynput.mouse._win32', 'serial.tools.list_ports_windows', 'tzdata',
+        'serial.tools.list_ports_windows', 'tzdata',
     ]
     # soundcard reads its C header at runtime; zoneinfo needs the tzdata database on Windows
     datas += collect_data_files('soundcard') + collect_data_files('tzdata')
@@ -45,7 +45,10 @@ if IS_WINDOWS:
     icon = os.path.join('build', 'led_mon.ico')
     make_icon_image(256).save(icon, sizes=[(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
 else:
-    hiddenimports += ['sounddevice', 'pulsectl']
+    hiddenimports += ['pynput', 'sounddevice', 'pulsectl']
+
+# Windows uses registered hotkeys; keep pynput's keyboard hook out of the exe (antivirus flags it)
+excludes = ['pynput'] if IS_WINDOWS else []
 
 a = Analysis(
     ['main.py'],
@@ -56,7 +59,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=excludes,
     noarchive=False,
     optimize=0,
 )

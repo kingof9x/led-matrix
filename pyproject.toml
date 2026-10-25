@@ -39,7 +39,7 @@ dependencies = [
     "psutil",
     "pyserial",
     "evdev; sys_platform == 'linux'",
-    "pynput",
+    "pynput; sys_platform != 'win32'",
     "pulsectl; sys_platform == 'linux'",
     "sounddevice; sys_platform == 'linux'",
     "soundcard; sys_platform == 'win32'",

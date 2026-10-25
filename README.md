@@ -36,7 +36,9 @@ Two downloads are available on the [Releases](../../releases/latest) page (and a
 
 The installer installs for the current user only (no admin prompt) into `%LOCALAPPDATA%\Programs\led_mon`, adds a Start menu shortcut, and makes the app **start automatically when you log in**. That's the only difference from the portable exe. You can turn auto-start off in *Task Manager > Startup apps* (entry `led_mon`). Uninstall from *Settings > Apps*; this removes the app and the startup entry but keeps your config.
 
-On Windows the app runs without a window and shows an icon in the system tray (you may need to open the `^` overflow area). The tray menu has *Edit layout* (also opened by double-clicking the icon), *Identify panels* (same as `Alt` + `I`), *Next app*, *Freeze app switching*, *Open config folder*, *Open log*, *Reload config* and *Quit*. Only one copy runs at a time; starting it again does nothing. The keyboard shortcuts work as on Linux.
+On Windows the app runs without a window and shows an icon in the system tray (you may need to open the `^` overflow area). The tray menu has *Edit layout* (also opened by double-clicking the icon), *Identify panels*, *Next app*, *Freeze app switching*, *Open config folder*, *Open log*, *Reload config* and *Quit*. Only one copy runs at a time; starting it again does nothing.
+
+**Keyboard shortcuts on Windows** are `Ctrl` + `Alt` + `Shift` with the same letters as on Linux: `I` shows the app names for a few seconds, `N` shows the next app, `F` freezes app switching and `U` unfreezes it. They use the Windows hotkey feature, so the app only hears about these four shortcuts and never sees other keystrokes (`--no-key-listener` turns them off). The extra modifiers keep them from taking `Alt` + `F` and the like away from other programs.
 
 **Layout editor.** Instead of editing the config file by hand, open *Edit layout* from the tray menu (or *LED Matrix Layout Editor* in the Start menu, or run `led_mon.exe --edit-layout`).
 
@@ -308,6 +310,7 @@ systemctl --user start|stop|restart|status fwledmonitor
 ```
 
 ## Keyboard Shortcut
+On Windows, use `Ctrl`+`Alt`+`Shift` instead of `Alt` (see [Windows](#windows)).
 * Alt+I: displays app names in each quadrant while keys are pressed
 * Alt+N: displays the next widget without waiting for the time slice to complete
 * Alt+F: freezes app switching, causing the current widget to be displayed indefinitely
