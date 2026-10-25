@@ -1,0 +1,115 @@
+name: Windows build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write  # attach files to the GitHub release on v* tags
+
+jobs:
+  tests:
+    name: Tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install test dependencies
+        run: python -m pip install pytest pyserial pyyaml python-dotenv
+      - name: Run tests
+        run: python -m pytest
+
+  build:
+    name: Build exe and installer
+    needs: tests
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt pyinstaller pytest
+
+      - name: Run tests with the full dependencies
+        run: python -m pytest
+
+      - name: Read version from pyproject.toml
+        id: version
+        shell: pwsh
+        run: |
+          $version = python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])"
+          "version=$version" >> $env:GITHUB_OUTPUT
+          Write-Host "Version $version"
+
+      - name: Build one-dir (for the installer)
+        run: python -m PyInstaller led_mon.spec --noconfirm --clean --workpath build\onedir
+
+      - name: Build one-file (portable exe)
+        shell: pwsh
+        run: |
+          $env:LED_MON_ONEFILE = "1"
+          python -m PyInstaller led_mon.spec --noconfirm --clean --workpath build\onefile
+
+      - name: Smoke test (--list-apps, no panels needed)
+        shell: pwsh
+        run: |
+          foreach ($exe in @("dist\led_mon.exe", "dist\led_mon\led_mon.exe")) {
+            Write-Host "== $exe --list-apps"
+            # The exe is windowless, so start it explicitly and wait for its exit code
+            $p = Start-Process -FilePath $exe -ArgumentList "--list-apps" -PassThru -NoNewWindow `
+                 -RedirectStandardOutput smoke-out.txt -RedirectStandardError smoke-err.txt
+            $null = $p.Handle
+            if (-not $p.WaitForExit(120000)) { $p.Kill(); throw "$exe --list-apps did not exit" }
+            Get-Content smoke-out.txt, smoke-err.txt -ErrorAction SilentlyContinue
+            if ($p.ExitCode -ne 0) { throw "$exe --list-apps exited with $($p.ExitCode)" }
+          }
+
+      # Code signing placeholder (not enabled yet). Unsigned builds show a SmartScreen warning.
+      # - name: Sign executables
+      #   shell: pwsh
+      #   run: |
+      #     signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 `
+      #       /f cert.pfx /p "${{ secrets.SIGNING_CERT_PASSWORD }}" dist\led_mon.exe dist\led_mon\led_mon.exe
+
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=${{ steps.version.outputs.version }}" installer\led_mon.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed" }
+
+      - name: Upload portable exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: led_mon.exe
+          path: dist/led_mon.exe
+          if-no-files-found: error
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: led_mon-setup-${{ steps.version.outputs.version }}.exe
+          path: dist/led_mon-setup-${{ steps.version.outputs.version }}.exe
+          if-no-files-found: error
+
+      - name: Attach to GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/led_mon.exe
+            dist/led_mon-setup-${{ steps.version.outputs.version }}.exe
