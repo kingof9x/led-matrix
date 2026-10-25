@@ -4,6 +4,10 @@
 
 duration: 10
 
+# Optional: pin each panel to a serial port instead of auto-detecting it (e.g. COM4 on Windows, /dev/ttyACM0 on Linux)
+# left-port: COM4
+# right-port: COM5
+
 quadrants:
   top-left:
   - app:

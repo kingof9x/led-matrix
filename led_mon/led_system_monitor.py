@@ -12,6 +12,10 @@ from collections import defaultdict
 import logging
 
 # Internal Dependencies
+from led_mon import platform_utils
+from led_mon.platform_utils import IS_WINDOWS, IS_LINUX
+# Load API keys before the plugins are imported (via drawing) and read them
+platform_utils.load_env_file()
 from led_mon.drawing import draw_outline_border, draw_ids, draw_id, draw_app, draw_app_border, DrawingThread
 from led_mon.monitors import CPUMonitor, MemoryMonitor, BatteryMonitor, DiskMonitor, NetworkMonitor, get_monitor_brightness
 from led_mon import shared_state
@@ -19,9 +23,14 @@ from led_mon.shared_state import discover_led_devices
 
 # External Dependencies
 import numpy as np
-import evdev
-from evdev import ecodes
 from yaml import safe_load
+# evdev (direct keyboard device access) only exists on Linux; elsewhere only pynput is used
+if IS_LINUX:
+    import evdev
+    from evdev import ecodes
+else:
+    evdev = None
+    ecodes = None
 
 # Optional cross-platform keyboard input; on some Linux Wayland setups this may be unavailable
 try:
@@ -45,14 +54,7 @@ LOG_LEVELS = {
 log_level = LOG_LEVELS[os.environ.get("LOG_LEVEL", "warning").lower()]
 log.setLevel(log_level)
 
-def is_frozen():
-    """Return True if running from a PyInstaller bundle."""
-    return hasattr(sys, "_MEIPASS")
-
-# The pyinstaller-frozen code runs as a service, with the env var file specified in the service configfuration
-if not is_frozen():
-    from dotenv import load_dotenv
-    load_dotenv()
+is_frozen = platform_utils.is_frozen
 
 MODIFIER_KEYS = [('KEY_RIGHTALT', 100), ('KEY_LEFTALT', 56)]
 # Key press to show widget IDs
@@ -65,6 +67,8 @@ freeze_app_switching = False
 
 def find_keyboard_device():
     """Auto-detect keyboard input device from /dev/input/event*"""
+    if evdev is None:
+        return None
     try:
         devices = [evdev.InputDevice(path) for path in evdev.list_devices()]
         for device in devices:
@@ -105,31 +109,32 @@ def evcode_keyloop():
         except (PermissionError, FileNotFoundError, OSError) as e:
             log.warning(f"Warning: Cannot access keyboard device {kbd_path}: {e}")
                 
-Thread(target=evcode_keyloop, daemon=True).start()
+if evdev is not None:
+    Thread(target=evcode_keyloop, daemon=True).start()
 
 
 def get_config(args):
-    # Check for --config-file program arg first, and then CONFIG_FILE environment variable (used by NixOS module)
-    config_file = args.config_file
-    if config_file:
-        log.debug(f"Using config file from program arg --config-file: {config_file}")
-    else:
-        config_file = os.environ.get('CONFIG_FILE', None)
-        if config_file:
-            log.debug(f"Using config file from CONFIG_FILE env var: {config_file}")
-        else:
-            # Fall back to config-local.yaml or config.yaml in current directory
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            config_file_name = 'config-local.yaml'
-            config_file = os.path.join(current_dir, config_file_name)
-            if os.path.exists(config_file):
-                log.debug(f"Using local config file {config_file}")
-            else:
-                config_file_name = 'config.yaml'
-                config_file = os.path.join(current_dir, config_file_name)
-                log.debug(f"Using default config file {config_file}")
+    # Check for --config-file program arg first, and then CONFIG_FILE environment variable (used by NixOS module),
+    # then config-local.yaml / config.yaml (next to the app on Linux, in %APPDATA%\led_mon on Windows)
+    config_file = platform_utils.resolve_config_file(args.config_file)
     with open(config_file, 'r') as f:
-        return safe_load(f)
+        config = safe_load(f)
+    # Optional left-port / right-port (e.g. COM4 or /dev/ttyACM0) override panel auto-detection
+    shared_state.port_overrides = {
+        side: config[f'{side}-port'] for side in ('left', 'right') if config.get(f'{side}-port')
+    }
+    return config
+
+def find_led_devices():
+    led_devices = discover_led_devices() or []
+    if IS_WINDOWS and not led_devices:
+        # When started at login, USB devices may still be enumerating
+        for _ in range(15):
+            time.sleep(2)
+            led_devices = discover_led_devices() or []
+            if led_devices:
+                break
+    return led_devices
 
 def list_apps(base_apps, plugin_apps, quads):
     max_len = max(map(lambda x: len(x), base_apps + plugin_apps))
@@ -154,7 +159,7 @@ device = None
 def app(args, base_apps, plugin_apps):    
     # Initialize evdev device for key listening if not disabled
     global device
-    if not args.no_key_listener:
+    if not args.no_key_listener and evdev is not None:
         # Try to auto-detect keyboard device first
         kbd_path = find_keyboard_device()
         if kbd_path:
@@ -196,7 +201,7 @@ def app(args, base_apps, plugin_apps):
         list_apps(base_apps, plugin_apps, quads)
         sys.exit()
 
-    led_devices = discover_led_devices()
+    led_devices = find_led_devices()
     if not len(led_devices):
         log.error("No LED devices found")
         sys.exit(0)
@@ -204,7 +209,8 @@ def app(args, base_apps, plugin_apps):
         log.warning(f"Only one LED device found ({led_devices[0]}). Right panel args will be ignored")
     else:
         log.info(f"Found LED devices: Left: {led_devices[0]}, Right: {led_devices[1]}")
-    locations = list(map(lambda x: x[0], led_devices))
+    # Use the port name when the USB location is unknown
+    locations = list(map(lambda x: x[0] or x[1], led_devices))
     drawing_queues = []
     
     # Track key presses to reveal app ID in each quadrant or panel
@@ -376,11 +382,7 @@ def app(args, base_apps, plugin_apps):
     #################################################
     if not re.search(r"--disable-plugins|-dp", str(sys.argv)):
         # Try to find plugins directory - either in current dir or installed location
-        import os.path
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        plugins_dir = os.path.join(current_dir, 'plugins')
-        if not os.path.exists(plugins_dir):
-            plugins_dir = './plugins/'
+        plugins_dir = platform_utils.plugins_dir()
         for file in os.listdir(plugins_dir):
             if file.endswith('_plugin.py'):
                 module_name = re.sub("_plugin.py", "", file)
@@ -644,11 +646,7 @@ def main(args):
     ###  Load additional app names from plugins for listing insalled apps  ###
     if not re.search(r"--disable-plugins|-dp", str(sys.argv)):
         # Try to find plugins directory - either in current dir or installed location
-        import os.path
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        plugins_dir = os.path.join(current_dir, 'plugins')
-        if not os.path.exists(plugins_dir):
-            plugins_dir = './plugins/'
+        plugins_dir = platform_utils.plugins_dir()
         for file in os.listdir(plugins_dir):
             if file.endswith('_plugin.py'):
                 module_name = re.sub("_plugin.py", "", file)
@@ -675,18 +673,7 @@ def main(args):
     app(args, base_apps, plugin_apps)
 
 if __name__ == "__main__":
-    level = logging.WARNING
-    if os.getenv("LOG_LEVEL", "").lower() == "debug":
-        level = logging.DEBUG
-    elif os.getenv("LOG_LEVEL", "").lower() == "error":
-        level = logging.ERROR
-    elif os.getenv("LOG_LEVEL", "").lower() == "info":
-        level = logging.INFO
-
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
+    platform_utils.setup_logging()
     main(sys.argv)
 
 

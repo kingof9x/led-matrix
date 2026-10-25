@@ -4,19 +4,15 @@ import sys
 import logging
 
 # Internal Dependencies
-from led_mon.led_system_monitor import main
+from led_mon import platform_utils
 
 if __name__ == "__main__":
-    level = logging.WARNING
-    if os.getenv("LOG_LEVEL", "").lower() == "debug":
-        level = logging.DEBUG
-    elif os.getenv("LOG_LEVEL", "").lower() == "error":
-        level = logging.ERROR
-    elif os.getenv("LOG_LEVEL", "").lower() == "info":
-        level = logging.INFO
-
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
-    main(sys.argv)
+    # Set up logging before the app (and its plugins) are imported, so import errors reach the log file on Windows
+    platform_utils.load_env_file()
+    platform_utils.setup_logging()
+    from led_mon.led_system_monitor import main
+    try:
+        main(sys.argv)
+    except Exception:
+        logging.getLogger(__name__).exception("led_mon stopped with an error")
+        raise

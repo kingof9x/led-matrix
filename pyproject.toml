@@ -21,6 +21,8 @@ classifiers = [
     "Intended Audience :: End Users/Desktop",
     "License :: OSI Approved :: MIT License",
     "Operating System :: POSIX :: Linux",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: Microsoft :: Windows :: Windows 11",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.7",
     "Programming Language :: Python :: 3.8",
@@ -36,8 +38,16 @@ dependencies = [
     "numpy",
     "psutil",
     "pyserial",
-    "evdev",
+    "evdev; sys_platform == 'linux'",
     "pynput",
+    "pulsectl; sys_platform == 'linux'",
+    "sounddevice; sys_platform == 'linux'",
+    "soundcard; sys_platform == 'win32'",
+    "pystray; sys_platform == 'win32'",
+    "pillow; sys_platform == 'win32'",
+    "pywin32; sys_platform == 'win32'",
+    "wmi; sys_platform == 'win32'",
+    "tzdata; sys_platform == 'win32'",
 ]
 
 [project.optional-dependencies]

@@ -23,4 +23,10 @@ Here is an explanation of the parameters that can (or must) be specified for eac
 **args** (optional): This is a mapping containing key-value pairs to be passed to the app, to configure app-specific behavior. App arguments and their meaning are described for each app in the main `README.md` file.
 
 
-Parameters specified in the global scope of the file apply to every app, unless overriden in a particular app. Currently, `duration` is the only global parameer recognized.
+Parameters specified in the global scope of the file apply to every app, unless overriden in a particular app. The global parameters recognized are:
+
+**duration**: default number of seconds each app is displayed.
+
+**left-port** / **right-port** (optional): pin the left or right panel to a serial port, such as `COM4` on Windows or `/dev/ttyACM0` on Linux, instead of detecting it automatically. Useful if the panels are detected in the wrong order. On Windows, the port names are shown in Device Manager under *Ports (COM & LPT)*.
+
+On Windows the config files live in `%APPDATA%\led_mon\` (the default `config.yaml` is copied there on first run).
