@@ -19,19 +19,20 @@ datas = [
 ]
 
 hiddenimports = [
-    'yaml', 'pynput', 'requests', 'zoneinfo', 'iplocate', 'dotenv',
+    'yaml', 'requests', 'zoneinfo', 'iplocate', 'dotenv',
     'scipy', 'scipy._distributor_init', 'scipy._lib.messagestream', 'scipy.special._ufuncs',
     'scipy.linalg._flapack', 'scipy.signal',
     # Plugins are loaded from files at runtime, so PyInstaller can't see what they import
     'led_mon.patterns', 'led_mon.drawing', 'led_mon.shared_state', 'led_mon.framework_tool',
     'led_mon.equalizer_files.visualize',
+    'led_mon.hotkeys',
 ]
 
 icon = None
 if IS_WINDOWS:
     hiddenimports += [
-        'soundcard', 'pystray', 'pystray._win32', 'PIL', 'wmi', 'win32com', 'win32com.client', 'pythoncom',
-        'pynput.keyboard._win32', 'pynput.mouse._win32', 'serial.tools.list_ports_windows', 'tzdata',
+        'soundcard', 'pystray', 'pystray._win32', 'PIL', 'PIL.ImageTk', 'wmi', 'win32com', 'win32com.client', 'pythoncom',
+        'serial.tools.list_ports_windows', 'tzdata',
     ]
     # soundcard reads its C header at runtime; zoneinfo needs the tzdata database on Windows
     datas += collect_data_files('soundcard') + collect_data_files('tzdata')
@@ -42,7 +43,10 @@ if IS_WINDOWS:
     icon = os.path.join('build', 'led_mon.ico')
     make_icon_image(256).save(icon, sizes=[(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
 else:
-    hiddenimports += ['sounddevice', 'pulsectl']
+    hiddenimports += ['pynput', 'sounddevice', 'pulsectl']
+
+# Windows uses registered hotkeys; keep pynput's keyboard hook out of the exe (antivirus flags it)
+excludes = ['pynput'] if IS_WINDOWS else []
 
 a = Analysis(
     ['main.py'],
@@ -53,7 +57,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=excludes,
     noarchive=False,
     optimize=0,
 )

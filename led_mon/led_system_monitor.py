@@ -34,8 +34,12 @@ else:
     evdev = None
     ecodes = None
 
-# Optional cross-platform keyboard input; on some Linux Wayland setups this may be unavailable
+# Optional cross-platform keyboard input; on some Linux Wayland setups this may be unavailable.
+# Not used on Windows: pynput hooks every keystroke, which antivirus scanners flag as a keylogger,
+# so Windows uses registered hotkeys instead (led_mon/hotkeys.py).
 try:
+    if IS_WINDOWS:
+        raise ImportError("Windows uses registered hotkeys")
     from pynput.keyboard import Key, Listener
     PYNPUT_AVAILABLE = True
 except Exception:
@@ -704,11 +708,19 @@ def app(args, base_apps, plugin_apps):
             time.sleep(1.0)
             
     # Informative message if pynput is not available
-    if not PYNPUT_AVAILABLE and not args.no_key_listener:
+    if not PYNPUT_AVAILABLE and not IS_WINDOWS and not args.no_key_listener:
         log.warning("Info: pynput is unavailable; running in evdev-only mode. Use Ctrl+C to exit.")
 
     def run_main_loop():
         platform_utils.init_com_for_thread()
+        if IS_WINDOWS and not args.no_key_listener:
+            from led_mon import hotkeys
+            hotkeys.start({
+                'i': request_identify,
+                'n': request_next_app,
+                'f': lambda: set_freeze(True),
+                'u': lambda: set_freeze(False),
+            })
         # Prefer pynput if available; fall back silently if it fails to start (common on Wayland)
         if PYNPUT_AVAILABLE and not args.no_key_listener:
             try:
