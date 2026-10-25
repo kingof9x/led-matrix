@@ -5,7 +5,7 @@ This software is intended for use on a Framework 16 laptop with LED Matrix Panel
 ## Compatibility
 
 **Hardware:** Framework 16 laptops with LED Matrix Panels  
-**Operating Systems:** Linux distributions (Ubuntu, Fedora, NixOS, Debian, CentOS, RHEL, and others)  
+**Operating Systems:** Linux distributions (Ubuntu, Fedora, NixOS, Debian, CentOS, RHEL, and others) and Windows 11 (see [Windows](#windows))  
 **Dependencies:** Python 3.7+ with numerous PyPi depednenceies (see requirements.txt)
 
 ## Quick Start (install the app and run it as a service)
@@ -24,6 +24,49 @@ chmod +x build_and_install.sh
 ```
 
 The `build_and_install.sh` script will automatically detect your Linux distribution, install the required dependencies, build an executable file of the python application, and install it as a user-level systemd service fwledmonitor.service.
+
+## Windows
+
+Two downloads are available on the [Releases](../../releases/latest) page (and as build artifacts of the *Windows build* GitHub Actions workflow). Neither needs Python.
+
+| File | What it is |
+|------|------------|
+| `led_mon.exe` | Portable app. Double-click to run, nothing is installed. |
+| `led_mon-setup-<version>.exe` | Installer for the same app. |
+
+The installer installs for the current user only (no admin prompt) into `%LOCALAPPDATA%\Programs\led_mon`, adds a Start menu shortcut, and makes the app **start automatically when you log in**. That's the only difference from the portable exe. You can turn auto-start off in *Task Manager > Startup apps* (entry `led_mon`). Uninstall from *Settings > Apps*; this removes the app and the startup entry but keeps your config.
+
+On Windows the app runs without a window and shows an icon in the system tray (you may need to open the `^` overflow area). The tray menu has *Identify panels* (same as `Alt` + `I`), *Next app*, *Freeze app switching*, *Open config folder*, *Open log*, *Reload config* and *Quit*. Only one copy runs at a time; starting it again does nothing. The keyboard shortcuts work as on Linux.
+
+**Where things live**
+
+* Config: `%APPDATA%\led_mon\config.yaml` (copied from the default on first run). Put your changes in `config-local.yaml` in the same folder, then choose *Reload config* from the tray menu.
+* API keys for the weather app: `%APPDATA%\led_mon\.env` (see `.env-example`).
+* Log: `%LOCALAPPDATA%\led_mon\led_mon.log` (rotated at 1 MB, 3 old files kept). Set `LOG_LEVEL=debug` in the `.env` file for more detail.
+* If the panels are detected in the wrong order, or not at all, set `left-port: COM4` / `right-port: COM5` in the config. The port numbers are shown in *Device Manager > Ports (COM & LPT)*.
+* Close other programs that use the panels (such as the LED Matrix GUI, `ledmatrixgui.exe`) before starting the app: on Windows only one program can open a panel's port at a time.
+
+**Temperatures and fans.** Windows has no standard API for these, so the `temp` and `fan` apps use Framework's `framework_tool`. Download `framework_tool.exe` from the [framework-system releases](https://github.com/FrameworkComputer/framework-system/releases) and put it next to `led_mon.exe` (for the installed app: `%LOCALAPPDATA%\Programs\led_mon`) or anywhere on your `PATH`. Check that `framework_tool --thermal` prints temperatures in a terminal. Without it, those apps show empty bars and the log says why.
+
+**Equalizer.** The equalizer listens to whatever is playing on the default output device (speakers or headphones) and follows a switch between them. It does not need `inputmodule-control` on Windows. `input-mode: microphone` uses the default microphone.
+
+**SmartScreen warning.** The builds are not code-signed yet, so Windows may show *"Windows protected your PC"* the first time. Click *More info* > *Run anyway*.
+
+**Build it yourself** (Windows, Python 3.12):
+
+```powershell
+git clone <repository-url>
+cd led-matrix
+py -3.12 -m venv .venv
+.venv\Scripts\activate
+python -m pip install -r requirements.txt pyinstaller pytest
+python -m pytest
+python -m led_mon.led_system_monitor --no-tray          # run from source in the console
+python -m PyInstaller led_mon.spec --noconfirm            # one-dir build: dist\led_mon\led_mon.exe
+$env:LED_MON_ONEFILE = "1"; python -m PyInstaller led_mon.spec --noconfirm --workpath build\onefile   # dist\led_mon.exe
+# Installer (needs Inno Setup 6):
+& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion=2.1.2 installer\led_mon.iss   # dist\led_mon-setup-2.1.2.exe
+```
 
 ## Capabilities
 * Display system performance characteristics in real-time

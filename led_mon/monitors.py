@@ -151,10 +151,25 @@ class BatteryMonitor:
                 battery_plugged = (bat_status != 'Discharging')
             return battery_percentage, battery_plugged
 
+_wmi_brightness_cache = (0.0, 1.0)  # (monotonic time, value)
+
+def _get_wmi_brightness():
+    # A WMI query takes tens of ms and the main loop runs at 10 Hz, so cache it briefly
+    global _wmi_brightness_cache
+    now = time.monotonic()
+    if now - _wmi_brightness_cache[0] < 2.0:
+        return _wmi_brightness_cache[1]
+    try:
+        value = wmi.WMI(namespace='wmi').WmiMonitorBrightness()[0].CurrentBrightness / 100.0
+    except Exception:
+        value = 1.0
+    _wmi_brightness_cache = (now, value)
+    return value
+
 def get_monitor_brightness():
     try:
         if os.name == 'nt':
-            return wmi.WMI(namespace='wmi').WmiMonitorBrightness()[0].CurrentBrightness / 100.0
+            return _get_wmi_brightness()
         else:
             # On Linux, use max_brightness to normalize into [0.0, 1.0]
             try:

@@ -1,5 +1,6 @@
 # Built In Dependencies
 from threading import Thread
+import threading
 import time
 import queue
 import sys
@@ -12,16 +13,26 @@ from collections import defaultdict
 import logging
 
 # Internal Dependencies
+from led_mon import platform_utils
+from led_mon.platform_utils import IS_WINDOWS, IS_LINUX
+# Load API keys before the plugins are imported (via drawing) and read them
+platform_utils.load_env_file()
 from led_mon.drawing import draw_outline_border, draw_ids, draw_id, draw_app, draw_app_border, DrawingThread
 from led_mon.monitors import CPUMonitor, MemoryMonitor, BatteryMonitor, DiskMonitor, NetworkMonitor, get_monitor_brightness
 from led_mon import shared_state
 from led_mon.shared_state import discover_led_devices
+from led_mon.serial_ports import close_all as close_all_ports
 
 # External Dependencies
 import numpy as np
-import evdev
-from evdev import ecodes
 from yaml import safe_load
+# evdev (direct keyboard device access) only exists on Linux; elsewhere only pynput is used
+if IS_LINUX:
+    import evdev
+    from evdev import ecodes
+else:
+    evdev = None
+    ecodes = None
 
 # Optional cross-platform keyboard input; on some Linux Wayland setups this may be unavailable
 try:
@@ -45,14 +56,7 @@ LOG_LEVELS = {
 log_level = LOG_LEVELS[os.environ.get("LOG_LEVEL", "warning").lower()]
 log.setLevel(log_level)
 
-def is_frozen():
-    """Return True if running from a PyInstaller bundle."""
-    return hasattr(sys, "_MEIPASS")
-
-# The pyinstaller-frozen code runs as a service, with the env var file specified in the service configfuration
-if not is_frozen():
-    from dotenv import load_dotenv
-    load_dotenv()
+is_frozen = platform_utils.is_frozen
 
 MODIFIER_KEYS = [('KEY_RIGHTALT', 100), ('KEY_LEFTALT', 56)]
 # Key press to show widget IDs
@@ -63,8 +67,48 @@ KEY_N = ('KEY_N', 49)
 global freeze_app_switching
 freeze_app_switching = False
 
+# Set to stop the main loop (tray Quit); set reload_config_event to re-read the config file
+shutdown_event = threading.Event()
+reload_config_event = threading.Event()
+# Show app IDs (as with Alt+I) until this monotonic time; used by the tray "Identify panels" item
+id_display_until = 0.0
+
+def request_identify(seconds=3.0):
+    global id_display_until
+    id_display_until = time.monotonic() + seconds
+
+def request_next_app():
+    global evdev_next_key_pressed
+    # One-shot flag, cleared by the main loop once the apps have advanced
+    evdev_next_key_pressed = True
+
+def set_freeze(frozen):
+    global freeze_app_switching
+    freeze_app_switching = frozen
+
+def is_frozen_switching():
+    return freeze_app_switching
+
+# pynput key helpers: Windows reports left/right Alt as alt_l / alt_r (or alt_gr)
+def is_alt_key(key):
+    if Key is None:
+        return False
+    return key in tuple(getattr(Key, name) for name in ('alt', 'alt_l', 'alt_r', 'alt_gr') if hasattr(Key, name))
+
+def key_char(key):
+    char = getattr(key, 'char', None)
+    if char:
+        return char.lower()
+    # With Alt held, Windows may report only the virtual key code
+    vk = getattr(key, 'vk', None)
+    if vk is not None and 0x41 <= vk <= 0x5A:
+        return chr(vk).lower()
+    return None
+
 def find_keyboard_device():
     """Auto-detect keyboard input device from /dev/input/event*"""
+    if evdev is None:
+        return None
     try:
         devices = [evdev.InputDevice(path) for path in evdev.list_devices()]
         for device in devices:
@@ -105,31 +149,32 @@ def evcode_keyloop():
         except (PermissionError, FileNotFoundError, OSError) as e:
             log.warning(f"Warning: Cannot access keyboard device {kbd_path}: {e}")
                 
-Thread(target=evcode_keyloop, daemon=True).start()
+if evdev is not None:
+    Thread(target=evcode_keyloop, daemon=True).start()
 
 
 def get_config(args):
-    # Check for --config-file program arg first, and then CONFIG_FILE environment variable (used by NixOS module)
-    config_file = args.config_file
-    if config_file:
-        log.debug(f"Using config file from program arg --config-file: {config_file}")
-    else:
-        config_file = os.environ.get('CONFIG_FILE', None)
-        if config_file:
-            log.debug(f"Using config file from CONFIG_FILE env var: {config_file}")
-        else:
-            # Fall back to config-local.yaml or config.yaml in current directory
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            config_file_name = 'config-local.yaml'
-            config_file = os.path.join(current_dir, config_file_name)
-            if os.path.exists(config_file):
-                log.debug(f"Using local config file {config_file}")
-            else:
-                config_file_name = 'config.yaml'
-                config_file = os.path.join(current_dir, config_file_name)
-                log.debug(f"Using default config file {config_file}")
+    # Check for --config-file program arg first, and then CONFIG_FILE environment variable (used by NixOS module),
+    # then config-local.yaml / config.yaml (next to the app on Linux, in %APPDATA%\led_mon on Windows)
+    config_file = platform_utils.resolve_config_file(args.config_file)
     with open(config_file, 'r') as f:
-        return safe_load(f)
+        config = safe_load(f)
+    # Optional left-port / right-port (e.g. COM4 or /dev/ttyACM0) override panel auto-detection
+    shared_state.port_overrides = {
+        side: config[f'{side}-port'] for side in ('left', 'right') if config.get(f'{side}-port')
+    }
+    return config
+
+def find_led_devices():
+    led_devices = discover_led_devices() or []
+    if IS_WINDOWS and not led_devices:
+        # When started at login, USB devices may still be enumerating
+        for _ in range(15):
+            time.sleep(2)
+            led_devices = discover_led_devices() or []
+            if led_devices:
+                break
+    return led_devices
 
 def list_apps(base_apps, plugin_apps, quads):
     max_len = max(map(lambda x: len(x), base_apps + plugin_apps))
@@ -154,7 +199,7 @@ device = None
 def app(args, base_apps, plugin_apps):    
     # Initialize evdev device for key listening if not disabled
     global device
-    if not args.no_key_listener:
+    if not args.no_key_listener and evdev is not None:
         # Try to auto-detect keyboard device first
         kbd_path = find_keyboard_device()
         if kbd_path:
@@ -176,35 +221,50 @@ def app(args, base_apps, plugin_apps):
     ### Parse config file to enable control of apps by quadrant and by time slice ##
     ################################################################################
     config = get_config(args)
-    duration = config['duration'] #Default config to be applied if not set in an app
-    quads = config['quadrants']
-    top_left,  bottom_left, top_right, bottom_right, = \
-        quads['top-left'], quads['bottom-left'], quads['top-right'], quads['bottom-right']
-    
     # Track index of active app, for cycling through apps in a quadrant by time slice
     app_idx = defaultdict(int)
-    for quad in quads:
-        app_idx[quad] = 0
-        
     # Each app optionally specifes how long it stays active before cycling to the next one
     app_duration = defaultdict(int)
-    for quad in quads.items():
-        for app in quad[1]:
-            app_duration[app["name"]] = int(app.get("duration", duration))
+
+    def apply_config(config):
+        nonlocal duration, quads, top_left, bottom_left, top_right, bottom_right
+        duration = config['duration'] #Default config to be applied if not set in an app
+        quads = config['quadrants']
+        top_left,  bottom_left, top_right, bottom_right, = \
+            quads['top-left'], quads['bottom-left'], quads['top-right'], quads['bottom-right']
+        app_idx.clear()
+        for quad in quads:
+            app_idx[quad] = 0
+        app_duration.clear()
+        for quad in quads.items():
+            for app in quad[1]:
+                app_duration[app["name"]] = int(app.get("duration", duration))
+
+    duration = quads = top_left = bottom_left = top_right = bottom_right = None
+    apply_config(config)
 
     if args.list_apps:
         list_apps(base_apps, plugin_apps, quads)
         sys.exit()
 
-    led_devices = discover_led_devices()
+    # Only one instance may drive the panels; a second launch exits silently (Windows)
+    if not platform_utils.acquire_single_instance():
+        log.info("led_mon is already running")
+        sys.exit(0)
+
+    led_devices = find_led_devices()
     if not len(led_devices):
         log.error("No LED devices found")
+        if use_tray(args):
+            platform_utils.show_error("No LED Matrix panels were found. Check that the modules are installed, "
+                                      "and that no other program (such as the LED Matrix GUI) is using them.")
         sys.exit(0)
     elif len(led_devices) == 1:
         log.warning(f"Only one LED device found ({led_devices[0]}). Right panel args will be ignored")
     else:
         log.info(f"Found LED devices: Left: {led_devices[0]}, Right: {led_devices[1]}")
-    locations = list(map(lambda x: x[0], led_devices))
+    # Use the port name when the USB location is unknown
+    locations = list(map(lambda x: x[0] or x[1], led_devices))
     drawing_queues = []
     
     # Track key presses to reveal app ID in each quadrant or panel
@@ -339,15 +399,19 @@ def app(args, base_apps, plugin_apps):
         if not PYNPUT_AVAILABLE:
             return
         try:
-            if getattr(key, 'char', None) == 'i':
+            char = key_char(key)
+            if char == 'i':
                 i_pressed = True
-            elif getattr(key, 'char', None) == 'n':
+            elif char == 'n':
+                # Advance once per Alt+N press (matches the evdev listener), not on every loop while held
+                if alt_pressed and not n_pressed:
+                    request_next_app()
                 n_pressed = True
-            elif getattr(key, 'char', None) == 'f':
+            elif char == 'f' and alt_pressed:
                 freeze_app_switching = True
-            elif getattr(key, 'char', None) == 'u':
+            elif char == 'u' and alt_pressed:
                 freeze_app_switching = False
-            elif Key is not None and key == Key.alt:
+            elif is_alt_key(key):
                 alt_pressed = True
         except Exception:
             # Be defensive; ignore unexpected pynput key objects
@@ -358,16 +422,13 @@ def app(args, base_apps, plugin_apps):
         if not PYNPUT_AVAILABLE:
             return
         try:
-            
-            if getattr(key, 'char', None) == 'i':
+            char = key_char(key)
+            if char == 'i':
                 i_pressed = False
-            elif getattr(key, 'char', None) == 'n':
+            elif char == 'n':
                 n_pressed = False
-            elif Key is not None and key == Key.alt:
+            elif is_alt_key(key):
                 alt_pressed = False
-            if Key is not None and key == Key.esc:
-                # Stop listener
-                return False
         except Exception:
             pass
         
@@ -376,11 +437,7 @@ def app(args, base_apps, plugin_apps):
     #################################################
     if not re.search(r"--disable-plugins|-dp", str(sys.argv)):
         # Try to find plugins directory - either in current dir or installed location
-        import os.path
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        plugins_dir = os.path.join(current_dir, 'plugins')
-        if not os.path.exists(plugins_dir):
-            plugins_dir = './plugins/'
+        plugins_dir = platform_utils.plugins_dir()
         for file in os.listdir(plugins_dir):
             if file.endswith('_plugin.py'):
                 module_name = re.sub("_plugin.py", "", file)
@@ -406,9 +463,36 @@ def app(args, base_apps, plugin_apps):
     # Used to detect that the key listener was activated, for restoring anination mode after ID display
     global latch_key_combo
     latch_key_combo = False
+    def dispose_active_apps():
+        for quadrant, apps in quads.items():
+            app = apps[app_idx[quadrant]]
+            dispose_fn = app.get('dispose-fn', None)
+            if dispose_fn and dispose_fn in app_functions:
+                try:
+                    app_functions[dispose_fn](**build_app_kwargs(app))
+                except Exception as e:
+                    log.error(f"Error disposing app {app.get('name')} in {quadrant}: {e}")
+
+    def reload_config():
+        try:
+            new_config = get_config(args)
+        except Exception as e:
+            log.error(f"Could not reload config, keeping the current one: {e}")
+            return
+        dispose_active_apps()
+        apply_config(new_config)
+        for quadrant_times in base_time_map.values():
+            quadrant_times.clear()
+        for quadrant in suppressed_panel_apps:
+            suppressed_panel_apps[quadrant] = None
+        log.info("Config reloaded")
+
     def render_iteration(args):
         global latch_key_combo, next_key_fired, freeze_app_switching, evdev_next_key_pressed
         try:
+            if reload_config_event.is_set():
+                reload_config_event.clear()
+                reload_config()
             screen_brightness = get_monitor_brightness()
             background_value = int(screen_brightness * (max_background_brightness - min_background_brightness) + min_background_brightness)
             foreground_value = int(screen_brightness * (max_foreground_brightness - min_foreground_brightness) + min_foreground_brightness)
@@ -424,10 +508,12 @@ def app(args, base_apps, plugin_apps):
             active_keys = device.active_keys(verbose=True) if device else []
             evdev_id_key_pressed = True if (MODIFIER_KEYS[0] in active_keys or MODIFIER_KEYS[1] in active_keys) and KEY_I in active_keys and device else False
             pynput_id_key_pressed = i_pressed and alt_pressed
-            pynput_next_key_pressed = n_pressed and alt_pressed
             id_key_combo_active = (evdev_id_key_pressed or pynput_id_key_pressed) and not args.no_key_listener
+            # Tray "Identify panels" works even with --no-key-listener
+            id_key_combo_active = id_key_combo_active or time.monotonic() < id_display_until
             shared_state.id_key_press_active = id_key_combo_active
-            next_key_combo_active = (evdev_next_key_pressed or pynput_next_key_pressed) and not args.no_key_listener
+            # evdev_next_key_pressed is a one-shot flag set by the evdev listener, pynput Alt+N and the tray
+            next_key_combo_active = evdev_next_key_pressed
 
             # Track when an app is changed in either panel, used to manage animation state
             idx_changed = {
@@ -621,34 +707,81 @@ def app(args, base_apps, plugin_apps):
     if not PYNPUT_AVAILABLE and not args.no_key_listener:
         log.warning("Info: pynput is unavailable; running in evdev-only mode. Use Ctrl+C to exit.")
 
-    # Prefer pynput if available; fall back silently if it fails to start (common on Wayland)
-    if PYNPUT_AVAILABLE and not args.no_key_listener:
-        try:
-            with Listener(on_press=on_press, on_release=on_release):
-                while True:
+    def run_main_loop():
+        platform_utils.init_com_for_thread()
+        # Prefer pynput if available; fall back silently if it fails to start (common on Wayland)
+        if PYNPUT_AVAILABLE and not args.no_key_listener:
+            try:
+                with Listener(on_press=on_press, on_release=on_release):
+                    while not shutdown_event.is_set():
+                        render_iteration(args)
+            except Exception as e:
+                log.error(f"Warning: pynput listener could not be started ({e}). Falling back to evdev-only mode.")
+                while not shutdown_event.is_set():
                     render_iteration(args)
-        except Exception as e:
-            log.error(f"Warning: pynput listener could not be started ({e}). Falling back to evdev-only mode.")
-            while True:
+        else:
+            while not shutdown_event.is_set():
                 render_iteration(args)
+
+    def shutdown():
+        """Stop drawing and release both serial ports (tray Quit)."""
+        dispose_active_apps()
+        drawing_threads = [left_drawing_thread] + ([right_drawing_thread] if len(locations) == 2 else [])
+        for draw_queue in drawing_queues:
+            stop_drawing_queue(draw_queue)
+        for thread in drawing_threads:
+            thread.join(timeout=3)
+        close_all_ports()
+
+    if use_tray(args):
+        from led_mon import tray
+        main_loop_thread = Thread(target=run_main_loop, daemon=True)
+        main_loop_thread.start()
+        tray.run_tray(
+            identify=request_identify,
+            next_app=request_next_app,
+            set_freeze=set_freeze,
+            is_frozen=is_frozen_switching,
+            reload_config=reload_config_event.set,
+            config_dir=platform_utils.user_config_dir(),
+            log_file=platform_utils.log_file_path(),
+            quit=shutdown_event.set,
+        )
+        # The tray returns after Quit
+        shutdown_event.set()
+        main_loop_thread.join(timeout=5)
+        shutdown()
     else:
-        while True:
-            render_iteration(args)
+        run_main_loop()
 
     log.info("Exiting")
 
+def use_tray(args):
+    # Windows runs windowless with a tray icon; --no-tray keeps the console behaviour for debugging
+    return IS_WINDOWS and not args.no_tray
+
+def stop_drawing_queue(draw_queue):
+    # The queue is small and may be full, so make room for the exit sentinel
+    while True:
+        try:
+            draw_queue.put_nowait(None)
+            return
+        except queue.Full:
+            try:
+                draw_queue.get_nowait()
+            except queue.Empty:
+                pass
+
 def main(args):
+    # A windowless Windows exe has no console; reuse the one it was started from for --help / --list-apps
+    platform_utils.attach_parent_console()
     base_apps = ["cpu", "net", "disk", "mem-bat", "snap"]
     plugin_apps = []
     ###############################################################
     ###  Load additional app names from plugins for listing insalled apps  ###
     if not re.search(r"--disable-plugins|-dp", str(sys.argv)):
         # Try to find plugins directory - either in current dir or installed location
-        import os.path
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        plugins_dir = os.path.join(current_dir, 'plugins')
-        if not os.path.exists(plugins_dir):
-            plugins_dir = './plugins/'
+        plugins_dir = platform_utils.plugins_dir()
         for file in os.listdir(plugins_dir):
             if file.endswith('_plugin.py'):
                 module_name = re.sub("_plugin.py", "", file)
@@ -670,23 +803,14 @@ def main(args):
     mode_group.add_argument("--disable-plugins", "-dp", action="store_true", help="Do not load any plugin code")
     mode_group.add_argument("--list-apps", "-la", action="store_true", help="List the installed apps, and exit")
     mode_group.add_argument("--config-file", "-cf", default=None, help="Absolute path to custom config file")
+    if IS_WINDOWS:
+        mode_group.add_argument("--no-tray", action="store_true", help="Run in the console without a tray icon")
     
     args = parser.parse_args()
     app(args, base_apps, plugin_apps)
 
 if __name__ == "__main__":
-    level = logging.WARNING
-    if os.getenv("LOG_LEVEL", "").lower() == "debug":
-        level = logging.DEBUG
-    elif os.getenv("LOG_LEVEL", "").lower() == "error":
-        level = logging.ERROR
-    elif os.getenv("LOG_LEVEL", "").lower() == "info":
-        level = logging.INFO
-
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
+    platform_utils.setup_logging()
     main(sys.argv)
 
 

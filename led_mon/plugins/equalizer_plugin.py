@@ -8,7 +8,7 @@ import time
 # Internal dependencies
 from led_mon.patterns import letters_5_x_6, numerals
 from led_mon import drawing
-from led_mon.equalizer_files.visualize import Equalizer, has_inputmodule_control
+from led_mon.equalizer_files.visualize import Equalizer, can_draw_equalizer
 from led_mon.shared_state import discover_led_devices
 
 log = logging.getLogger(__name__)
@@ -71,7 +71,7 @@ def run_equalizer(_, grid, foreground_value, idx, **kwargs):
         log.error(f"Unexpected equalizer side arg '{side}'. Expected 'left' or 'right'.")
         return
 
-    if not has_inputmodule_control():
+    if not can_draw_equalizer():
         log.error("inputmodule-control is not available on PATH. Skipping equalizer startup.")
         return
 
@@ -88,7 +88,8 @@ def run_equalizer(_, grid, foreground_value, idx, **kwargs):
         return
     device = devices[channel]
 
-    eq = Equalizer(device_location=device[0])
+    # Use the port name when the USB location is unknown (e.g. on Windows)
+    eq = Equalizer(device_location=device[0] or device[1])
     equalizers[side] = eq
 
     def _run():
