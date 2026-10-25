@@ -214,3 +214,15 @@ def open_path(path):
     else:
         import subprocess
         subprocess.Popen(["xdg-open", path])
+
+
+def show_error(message, title="LED Matrix Monitor"):
+    """Tell the user about a fatal problem when there is no console to print to (Windows)."""
+    if not IS_WINDOWS:
+        return
+    try:
+        import ctypes
+        MB_ICONERROR = 0x10
+        ctypes.windll.user32.MessageBoxW(None, message, title, MB_ICONERROR)
+    except Exception:
+        pass
