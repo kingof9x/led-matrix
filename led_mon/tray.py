@@ -31,7 +31,7 @@ def make_icon_image(size=64):
     return img
 
 
-def run_tray(identify, next_app, set_freeze, is_frozen, reload_config, config_dir, log_file, quit):
+def run_tray(identify, next_app, set_freeze, is_frozen, reload_config, config_dir, log_file, quit, edit_layout=None):
     """Show the tray icon and block until Quit is chosen."""
     import pystray
 
@@ -47,6 +47,12 @@ def run_tray(identify, next_app, set_freeze, is_frozen, reload_config, config_di
         except Exception as e:
             log.error(f"Could not open {log_file}: {e}")
 
+    def open_editor(icon, item):
+        try:
+            edit_layout()
+        except Exception as e:
+            log.error(f"Could not open the layout editor: {e}")
+
     def toggle_freeze(icon, item):
         set_freeze(not is_frozen())
 
@@ -56,6 +62,8 @@ def run_tray(identify, next_app, set_freeze, is_frozen, reload_config, config_di
         icon.stop()
 
     menu = pystray.Menu(
+        pystray.MenuItem("Edit layout...", open_editor, default=True, visible=edit_layout is not None),
+        pystray.Menu.SEPARATOR,
         pystray.MenuItem("Identify panels", lambda icon, item: identify()),
         pystray.MenuItem("Next app", lambda icon, item: next_app()),
         pystray.MenuItem("Freeze app switching", toggle_freeze, checked=lambda item: is_frozen()),
