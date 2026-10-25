@@ -19,13 +19,19 @@ from led_mon.drawing import DrawingThread
 # Internal Dependencies
 from led_mon.shared_state import discover_led_devices
 from led_mon.patterns import id_patterns
+from led_mon.platform_utils import IS_WINDOWS
 import queue
 
 # External Dependencies
 import numpy as np
-import sounddevice as sd
 from scipy.signal import butter, sosfiltfilt
-from pulsectl import Pulse
+if IS_WINDOWS:
+    # WASAPI loopback capture of the default output device
+    sd = None
+    Pulse = None
+else:
+    import sounddevice as sd
+    from pulsectl import Pulse
 
 
 level = logging.WARNING

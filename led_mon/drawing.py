@@ -12,10 +12,12 @@ import logging
 # Internal Dependencies
 from led_mon.commands import Commands, send_command, do_animate
 from led_mon.patterns import lightning_bolt_bot, lightning_bolt_top, lookup_table, id_patterns, symbols, numerals, icons
+from led_mon.platform_utils import package_dir, plugins_dir
+from led_mon.serial_ports import open_port, port_lock
+from led_mon.shared_state import is_led_matrix_port
 
 # External Dependencies
 import numpy as np
-import serial # pyserial
 from serial.tools import list_ports
 
 log = logging.getLogger(__name__)
@@ -100,7 +102,7 @@ def draw_snapshot(grid, fill_value, **kwargs):
     path = kwargs.get('path', None)
     panel = kwargs.get('panel', None)
     file = kwargs.get('file', None)
-    current_dir = os.path.dirname(os.path.abspath(__file__))
+    current_dir = package_dir()
     path = os.path.join(current_dir, path)
     subdirs = [ f.name for f in os.scandir(path) if f.is_dir() and f.name in ['left', 'right']]
     subdir = panel if panel in subdirs else ''
@@ -257,21 +259,25 @@ def draw_id(grid, id, fill_value, args=None):
 def draw_to_LEDs(s, grid):
     # Ensure all values are valid bytes before sending
     safe_grid = np.clip(grid, 0, 255).astype(np.uint8)
-    for i in range(safe_grid.shape[0]):
-        params = bytearray([i]) + bytearray(safe_grid[i, :].tolist())
-        send_command(s, Commands.StageCol, parameters=params)
-    send_command(s, Commands.FlushCols)
+    # Hold the port for the whole frame so another thread sharing it can't interleave commands
+    with port_lock(s):
+        for i in range(safe_grid.shape[0]):
+            params = bytearray([i]) + bytearray(safe_grid[i, :].tolist())
+            send_command(s, Commands.StageCol, parameters=params)
+        send_command(s, Commands.FlushCols)
 
 
 def init_device(location = "1-3.2", fatal=True):
+    # location is a USB location prefix (e.g. 1-3.2), or a port name (e.g. COM4) when the
+    # location is unknown or the port was pinned with left-port / right-port in the config
     try:
-        # VID = 1234
-        # PID = 5678
         device_list = list_ports.comports()
         for device in device_list:
-            if device.location and device.location.startswith(location):
-                s = serial.Serial(device.device, 115200)
-                return s
+            if device.device.lower() == str(location).lower():
+                return open_port(device.device)
+        for device in device_list:
+            if device.location and device.location.startswith(location) and is_led_matrix_port(device):
+                return open_port(device.device)
         raise RuntimeError(f"No LED panel device found for location prefix '{location}'")
     except Exception as e:
         if fatal:
@@ -358,15 +364,11 @@ class DrawingThread(threading.Thread):
 # Keep this at the end of the module to avoid circular imports
 if not re.search(r"--disable-plugins|-dp", str(sys.argv)):
     # Try to find plugins directory - either in current dir or installed location
-    import os.path
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    plugins_dir = os.path.join(current_dir, 'plugins')
-    if not os.path.exists(plugins_dir):
-        plugins_dir = './plugins/'
-    for file in os.listdir(plugins_dir):
+    _plugins_dir = plugins_dir()
+    for file in os.listdir(_plugins_dir):
         if file.endswith('_plugin.py'):
             module_name = re.sub("_plugin.py", "", file)
-            file_path = os.path.join(plugins_dir, file)
+            file_path = os.path.join(_plugins_dir, file)
             spec = importlib.util.spec_from_file_location(module_name, file_path)
             module = importlib.util.module_from_spec(spec)
             sys.modules[module_name] = module

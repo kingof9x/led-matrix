@@ -5,19 +5,9 @@ import sys
 
 # Internal dependencies
 from led_mon.led_system_monitor import main
+from led_mon import platform_utils
 
-level = logging.WARNING
-if os.getenv("LOG_LEVEL", "").lower() == "debug":
-    level = logging.DEBUG
-elif os.getenv("LOG_LEVEL", "").lower() == "error":
-    level = logging.ERROR
-elif os.getenv("LOG_LEVEL", "").lower() == "info":
-    level = logging.INFO
-
-logging.basicConfig(
-    level=level,
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-)
+platform_utils.setup_logging()
 
 log = logging.getLogger(__name__)
 

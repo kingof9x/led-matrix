@@ -539,11 +539,17 @@ def draw_time(arg, grid, foreground_value, idx, **kwargs):
 
 
 def repeat_function(interval, func, *args, **kwargs):
+    # Daemon timers, so they don't keep the process alive after --list-apps or Quit
+    def start_timer():
+        timer = Timer(interval, wrapper)
+        timer.daemon = True
+        timer.start()
+
     def wrapper():
         func(*args, **kwargs)
-        Timer(interval, wrapper).start()
+        start_timer()
 
-    Timer(interval, wrapper).start()
+    start_timer()
 
 
 # Get fresh weather data every 30 secs.

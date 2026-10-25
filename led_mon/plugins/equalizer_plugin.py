@@ -88,7 +88,8 @@ def run_equalizer(_, grid, foreground_value, idx, **kwargs):
         return
     device = devices[channel]
 
-    eq = Equalizer(device_location=device[0])
+    # Use the port name when the USB location is unknown (e.g. on Windows)
+    eq = Equalizer(device_location=device[0] or device[1])
     equalizers[side] = eq
 
     def _run():
