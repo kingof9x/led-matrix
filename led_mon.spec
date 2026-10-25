@@ -25,12 +25,15 @@ hiddenimports = [
     # Plugins are loaded from files at runtime, so PyInstaller can't see what they import
     'led_mon.patterns', 'led_mon.drawing', 'led_mon.shared_state', 'led_mon.framework_tool',
     'led_mon.equalizer_files.visualize',
+    # The layout editor is imported only when started with --edit-layout
+    'led_mon.rendering', 'led_mon.control', 'led_mon.editor', 'led_mon.editor.window', 'led_mon.editor.preview',
+    'led_mon.editor.layout', 'led_mon.editor.catalog', 'tkinter', 'tkinter.ttk', 'tkinter.messagebox',
 ]
 
 icon = None
 if IS_WINDOWS:
     hiddenimports += [
-        'soundcard', 'pystray', 'pystray._win32', 'PIL', 'wmi', 'win32com', 'win32com.client', 'pythoncom',
+        'soundcard', 'pystray', 'pystray._win32', 'PIL', 'PIL.ImageTk', 'wmi', 'win32com', 'win32com.client', 'pythoncom',
         'pynput.keyboard._win32', 'pynput.mouse._win32', 'serial.tools.list_ports_windows', 'tzdata',
     ]
     # soundcard reads its C header at runtime; zoneinfo needs the tzdata database on Windows

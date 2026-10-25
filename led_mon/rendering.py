@@ -1,0 +1,95 @@
+# Drawing one panel's frame from its active apps.
+# Shared by the monitor main loop and the layout editor's preview, so the preview matches the panels.
+
+# Built In Dependencies
+import logging
+
+# Internal Dependencies
+from led_mon.drawing import draw_app, draw_app_border
+
+log = logging.getLogger(__name__)
+
+# Brightness used when the screen brightness is unknown (the editor preview)
+DEFAULT_FOREGROUND = 160
+DEFAULT_BACKGROUND = 35
+
+
+def make_base_app_functions(cpu_monitor, memory_monitor, battery_monitor, disk_monitor, network_monitor):
+    """The built-in apps, keyed by app name. Plugins add more (see plugins-README.md)."""
+    def draw_cpu(arg, grid, foreground_value, idx):
+        last_cpu_values = cpu_monitor.get()
+        draw_app(arg, grid, last_cpu_values, foreground_value, idx)
+
+    def draw_mem_bat(arg, grid, foreground_value, idx):
+        last_memory_values = memory_monitor.get()
+        last_battery_values = battery_monitor.get()
+        draw_app("mem", grid, last_memory_values, foreground_value, idx)
+        draw_app("bat", grid, last_battery_values[0], last_battery_values[1], foreground_value, idx+3)
+
+    def draw_disk(arg, grid, foreground_value, idx):
+        last_disk_read, last_disk_write = disk_monitor.get()
+        draw_app(arg, grid, last_disk_read, foreground_value, bar_x_offset=1, y=idx) # Read
+        draw_app(arg, grid, last_disk_write, foreground_value, bar_x_offset=5, y=idx) # Write
+
+    def draw_net(arg, grid, foreground_value, idx):
+        last_network_upload, last_network_download = network_monitor.get()
+        draw_app(arg, grid, last_network_upload, foreground_value, bar_x_offset=1, y=idx)
+        draw_app(arg, grid, last_network_download, foreground_value, bar_x_offset=5, y=idx)
+
+    def draw_snap(arg, grid, foreground_value, idx, **kwargs):
+        draw_app(arg, grid, foreground_value, **kwargs)
+
+    return {
+        "cpu": draw_cpu,
+        "mem-bat": draw_mem_bat,
+        "disk": draw_disk,
+        "net": draw_net,
+        "snap": draw_snap,
+        "none": lambda *x: x # noop
+    }
+
+
+def build_app_kwargs(app):
+    if 'args' in app and app['args']:
+        # Args must be hashable, to support function caching, so convert list values to tuples
+        return {k: tuple(v) if isinstance(v, list) else v for k, v in app['args'].items()}
+    return {}
+
+
+def render_panel(grid, panel_apps, app_functions, foreground_value, background_value, panel='left'):
+    """Draw a panel's active apps into grid (9 x 34).
+
+    panel_apps is [owner] when one app has the whole panel (scope: panel), otherwise [top, bottom].
+    Returns (persistent_draw, animate): persistent_draw means an app draws to the panel itself
+    (the equalizer), so the grid must not be sent; animate is the last drawn app's animate setting.
+    """
+    persistent_draw = False
+    animate = False
+    for j, arg in enumerate(panel_apps):
+        arg_name = arg['name']
+        if arg.get("display", True) == False: continue
+        if arg.get('persistent-draw', False):
+            persistent_draw = True
+        if j == 0:
+            idx = 0
+            loc = 'top'
+        else:
+            idx = 16
+            loc = 'bottom'
+        kwargs = build_app_kwargs(arg)
+        try:
+            func = app_functions[arg_name]
+            func(arg_name, grid, foreground_value, idx, **kwargs)
+            animate = arg.get("animate", False)
+        except KeyError:
+            log.error(f"Unrecognized app {arg_name} for {loc} {panel}")
+        except Exception as e:
+            log.error(f"Error {e} with app {arg_name} for {loc} {panel}")
+        # Single border draw for mem and bat together
+        if arg_name == 'mem-bat': arg_name = 'mem'
+        if kwargs.get('border', True) and arg.get("scope", None) != "panel":
+            try:
+                draw_app_border(arg_name, grid, background_value, idx)
+            except KeyError:
+                pass
+    return persistent_draw, animate

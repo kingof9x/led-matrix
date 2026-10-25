@@ -36,11 +36,20 @@ Two downloads are available on the [Releases](../../releases/latest) page (and a
 
 The installer installs for the current user only (no admin prompt) into `%LOCALAPPDATA%\Programs\led_mon`, adds a Start menu shortcut, and makes the app **start automatically when you log in**. That's the only difference from the portable exe. You can turn auto-start off in *Task Manager > Startup apps* (entry `led_mon`). Uninstall from *Settings > Apps*; this removes the app and the startup entry but keeps your config.
 
-On Windows the app runs without a window and shows an icon in the system tray (you may need to open the `^` overflow area). The tray menu has *Identify panels* (same as `Alt` + `I`), *Next app*, *Freeze app switching*, *Open config folder*, *Open log*, *Reload config* and *Quit*. Only one copy runs at a time; starting it again does nothing. The keyboard shortcuts work as on Linux.
+On Windows the app runs without a window and shows an icon in the system tray (you may need to open the `^` overflow area). The tray menu has *Edit layout* (also opened by double-clicking the icon), *Identify panels* (same as `Alt` + `I`), *Next app*, *Freeze app switching*, *Open config folder*, *Open log*, *Reload config* and *Quit*. Only one copy runs at a time; starting it again does nothing. The keyboard shortcuts work as on Linux.
+
+**Layout editor.** Instead of editing the config file by hand, open *Edit layout* from the tray menu (or *LED Matrix Layout Editor* in the Start menu, or run `led_mon.exe --edit-layout`).
+
+* The list on the left shows the available apps. Half-panel apps (CPU, memory + battery, disk, network, temperatures, fans) go in the top or bottom half of a panel; whole-panel apps (clock, weather, equalizer, picture) fill it.
+* Each panel shows a list of *pages*, shown in turn for the number of seconds you set. Drag an app onto a panel to put it on the selected page, or select a slot and double-click an app. Click an app on the panel to change its settings on the right.
+* The panel pictures are a live preview, drawn with the same code as the real panels and your computer's current values. The equalizer preview shows made-up bars.
+* *Apply to panels* saves the layout to `%APPDATA%\led_mon\config-local.yaml` (the previous file is kept as `config-local.yaml.bak`) and the running app switches to it straight away.
+* *Send preview* shows the current preview on the panels as a still picture for 30 seconds (or until *Resume monitor*), without saving. When the app isn't running, the editor sends the picture to the panels itself.
+* The *Port* boxes pin a panel to a COM port (the `left-port` / `right-port` settings); that takes effect the next time the app starts.
 
 **Where things live**
 
-* Config: `%APPDATA%\led_mon\config.yaml` (copied from the default on first run). Put your changes in `config-local.yaml` in the same folder, then choose *Reload config* from the tray menu.
+* Config: `%APPDATA%\led_mon\config.yaml` (copied from the default on first run). The layout editor saves to `config-local.yaml` in the same folder; if you edit that file by hand instead, choose *Reload config* from the tray menu afterwards.
 * API keys for the weather app: `%APPDATA%\led_mon\.env` (see `.env-example`).
 * Log: `%LOCALAPPDATA%\led_mon\led_mon.log` (rotated at 1 MB, 3 old files kept). Set `LOG_LEVEL=debug` in the `.env` file for more detail.
 * If the panels are detected in the wrong order, or not at all, set `left-port: COM4` / `right-port: COM5` in the config. The port numbers are shown in *Device Manager > Ports (COM & LPT)*.
@@ -62,6 +71,7 @@ py -3.12 -m venv .venv
 python -m pip install -r requirements.txt pyinstaller pytest
 python -m pytest
 python -m led_mon.led_system_monitor --no-tray          # run from source in the console
+python -m led_mon.led_system_monitor --edit-layout      # the layout editor
 python -m PyInstaller led_mon.spec --noconfirm            # one-dir build: dist\led_mon\led_mon.exe
 $env:LED_MON_ONEFILE = "1"; python -m PyInstaller led_mon.spec --noconfirm --workpath build\onefile   # dist\led_mon.exe
 # Installer (needs Inno Setup 6):

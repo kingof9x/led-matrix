@@ -216,6 +216,18 @@ def open_path(path):
         subprocess.Popen(["xdg-open", path])
 
 
+def launch_self(*args):
+    """Start another copy of this program (the exe when frozen) with the given arguments."""
+    import subprocess
+    if is_frozen():
+        command = [sys.executable, *args]
+        cwd = None
+    else:
+        command = [sys.executable, "-m", "led_mon.main", *args]
+        cwd = os.path.dirname(package_dir())
+    return subprocess.Popen(command, cwd=cwd, creationflags=subprocess_flags())
+
+
 def show_error(message, title="LED Matrix Monitor"):
     """Tell the user about a fatal problem when there is no console to print to (Windows)."""
     if not IS_WINDOWS:

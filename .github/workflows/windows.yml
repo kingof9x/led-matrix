@@ -76,6 +76,21 @@ jobs:
             if ($p.ExitCode -ne 0) { throw "$exe --list-apps exited with $($p.ExitCode)" }
           }
 
+      - name: Smoke test (layout editor opens and closes)
+        shell: pwsh
+        run: |
+          $env:LED_MON_EDITOR_SMOKE_TEST = "1"
+          $env:APPDATA = "$PWD\smoke-appdata"
+          $env:LOCALAPPDATA = "$PWD\smoke-appdata"
+          foreach ($exe in @("dist\led_mon.exe", "dist\led_mon\led_mon.exe")) {
+            Write-Host "== $exe --edit-layout"
+            $p = Start-Process -FilePath $exe -ArgumentList "--edit-layout" -PassThru
+            $null = $p.Handle
+            if (-not $p.WaitForExit(120000)) { $p.Kill(); throw "$exe --edit-layout did not exit" }
+            Get-Content smoke-appdata\led_mon\led_mon.log -ErrorAction SilentlyContinue
+            if ($p.ExitCode -ne 0) { throw "$exe --edit-layout exited with $($p.ExitCode)" }
+          }
+
       # Code signing placeholder (not enabled yet). Unsigned builds show a SmartScreen warning.
       # - name: Sign executables
       #   shell: pwsh

@@ -22,6 +22,8 @@ from led_mon.monitors import CPUMonitor, MemoryMonitor, BatteryMonitor, DiskMoni
 from led_mon import shared_state
 from led_mon.shared_state import discover_led_devices
 from led_mon.serial_ports import close_all as close_all_ports
+from led_mon.rendering import make_base_app_functions, build_app_kwargs, render_panel
+from led_mon import control
 
 # External Dependencies
 import numpy as np
@@ -76,6 +78,28 @@ id_display_until = 0.0
 def request_identify(seconds=3.0):
     global id_display_until
     id_display_until = time.monotonic() + seconds
+
+# Still frames sent from the layout editor: {'left': grid, 'right': grid}, shown until preview_until
+preview_frames = {}
+preview_until = 0.0
+preview_lock = threading.Lock()
+
+def show_preview(frames, seconds):
+    global preview_frames, preview_until
+    with preview_lock:
+        preview_frames = frames
+        preview_until = time.monotonic() + seconds
+
+def clear_preview():
+    global preview_until
+    with preview_lock:
+        preview_until = 0.0
+
+def active_preview():
+    with preview_lock:
+        if time.monotonic() < preview_until:
+            return preview_frames
+    return None
 
 def request_next_app():
     global evdev_next_key_pressed
@@ -238,7 +262,8 @@ def app(args, base_apps, plugin_apps):
         app_duration.clear()
         for quad in quads.items():
             for app in quad[1]:
-                app_duration[app["name"]] = int(app.get("duration", duration))
+                # Keyed by quadrant too, so the same app can have a different duration in each quadrant
+                app_duration[(quad[0], app["name"])] = int(app.get("duration", duration))
 
     duration = quads = top_left = bottom_left = top_right = bottom_right = None
     apply_config(config)
@@ -304,37 +329,7 @@ def app(args, base_apps, plugin_apps):
         right_drawing_thread.start()
         drawing_queues.append(right_drawing_queue)
     
-    def draw_cpu(arg, grid, foreground_value, idx):
-        last_cpu_values = cpu_monitor.get()
-        draw_app(arg, grid, last_cpu_values, foreground_value, idx)
-        
-    def draw_mem_bat(arg, grid, foreground_value, idx):
-        last_memory_values = memory_monitor.get()
-        last_battery_values = battery_monitor.get()
-        draw_app("mem", grid, last_memory_values, foreground_value, idx)
-        draw_app("bat", grid, last_battery_values[0], last_battery_values[1], foreground_value, idx+3)
-        
-    def draw_disk(arg, grid, foreground_value, idx):
-        last_disk_read, last_disk_write = disk_monitor.get()
-        draw_app(arg, grid, last_disk_read, foreground_value, bar_x_offset=1, y=idx) # Read
-        draw_app(arg, grid, last_disk_write, foreground_value, bar_x_offset=5, y=idx) # Write
-        
-    def draw_net(arg, grid, foreground_value, idx):
-        last_network_upload, last_network_download = network_monitor.get()
-        draw_app(arg, grid, last_network_upload, foreground_value, bar_x_offset=1, y=idx)
-        draw_app(arg, grid, last_network_download, foreground_value, bar_x_offset=5, y=idx)
-        
-    def draw_snap(arg, grid, foreground_value, idx, **kwargs):
-        draw_app(arg, grid, foreground_value, **kwargs)
-        
-    app_functions = {
-        "cpu": draw_cpu,
-        "mem-bat": draw_mem_bat,
-        "disk": draw_disk,
-        "net": draw_net,
-        "snap": draw_snap,
-        "none": lambda *x: x # noop
-    }
+    app_functions = make_base_app_functions(cpu_monitor, memory_monitor, battery_monitor, disk_monitor, network_monitor)
 
     panel_scope_conflicts_logged = set()
     suppressed_panel_apps = {
@@ -343,12 +338,6 @@ def app(args, base_apps, plugin_apps):
         'top-right': None,
         'bottom-right': None,
     }
-
-    def build_app_kwargs(app):
-        if 'args' in app:
-            # Args must be hashable, to support function caching, so convert list values to tuples
-            return {k: tuple(v) if isinstance(v, list) else v for k, v in app['args'].items()}
-        return {}
 
     def get_panel_scope_owner(panel_name, top_quadrant_name, top_app, bottom_quadrant_name, bottom_app):
         top_claims_panel = top_app.get("display", True) and top_app.get("scope", None) == "panel"
@@ -487,8 +476,34 @@ def app(args, base_apps, plugin_apps):
             suppressed_panel_apps[quadrant] = None
         log.info("Config reloaded")
 
+    previewing = False
+
+    def handle_control_request(message):
+        cmd = message.get('cmd')
+        if cmd == 'status':
+            return {'ports': [device for _, device in led_devices],
+                    'config_file': platform_utils.resolve_config_file(args.config_file)}
+        if cmd == 'reload':
+            clear_preview()
+            reload_config_event.set()
+            return {}
+        if cmd == 'preview':
+            show_preview(message.get('frames', {}), float(message.get('seconds', 30)))
+            return {}
+        if cmd == 'resume':
+            clear_preview()
+            return {}
+        if cmd == 'identify':
+            request_identify()
+            return {}
+        return {'ok': False, 'error': f"Unknown command {cmd}"}
+
+    if IS_WINDOWS:
+        control.serve(handle_control_request)
+
     def render_iteration(args):
         global latch_key_combo, next_key_fired, freeze_app_switching, evdev_next_key_pressed
+        nonlocal previewing
         try:
             if reload_config_event.is_set():
                 reload_config_event.clear()
@@ -558,7 +573,7 @@ def app(args, base_apps, plugin_apps):
                     app = apps[app_idx[quadrant]]
                     suppressed_for_rotation = quadrant in suppressed_quadrants_pre_rotation
                     can_force_next = next_key_combo_active
-                    should_advance = (now - base_time_map[quadrant][app['name']] >= int(app_duration[app['name']])) or can_force_next
+                    should_advance = (now - base_time_map[quadrant][app['name']] >= int(app_duration[(quadrant, app['name'])])) or can_force_next
                     if should_advance and not freeze_app_switching:
                             if can_force_next:
                                 evdev_next_key_pressed = False
@@ -637,7 +652,23 @@ def app(args, base_apps, plugin_apps):
                 time.sleep(0.1)
                 latch_key_combo = True
                 return
-            
+
+            # A still frame sent from the layout editor takes over both panels until it times out
+            frames = active_preview()
+            if frames is not None:
+                if not previewing:
+                    # Stop apps that draw on their own (the equalizer) so they don't overwrite the frame
+                    dispose_active_apps()
+                    previewing = True
+                for i, draw_queue in enumerate(drawing_queues):
+                    frame = frames.get('left' if i == 0 else 'right')
+                    if frame is not None:
+                        draw_queue.put((np.array(frame, dtype=int), False))
+                time.sleep(0.25)
+                latch_key_combo = True
+                return
+            previewing = False
+
             for i, draw_queue in enumerate(drawing_queues):
                 grid = np.zeros((9,34), dtype = int)
                 if i == 0:
@@ -651,32 +682,7 @@ def app(args, base_apps, plugin_apps):
 
                 maybe_dispose_suppressed_panel_app(suppressed_quadrant)
                 # For persistent-draw apps, we don't submit the grid to the drawing queue
-                persistent_draw = False
-                for j, arg in enumerate(_args):
-                    arg_name = arg['name']
-                    if arg.get("display", True) == False: continue
-                    if arg.get('persistent-draw', False):
-                        persistent_draw = True
-                    if j == 0:
-                        idx = 0
-                        loc = 'top'
-                    else:
-                        idx = 16
-                        loc = 'bottom'
-                    try:
-                        func = app_functions[arg_name]
-                        func_args = [arg_name, grid, foreground_value, idx]
-                        kwargs = build_app_kwargs(arg)
-                        func(*func_args, **kwargs)
-                        animate = arg.get("animate", False)
-                    except KeyError:
-                        log.error(f"Unrecognized app {arg_name} for {loc} {panel}")
-                    except Exception as e:
-                        log.error(f"Error {e} with app {arg_name} for {loc} {panel}")
-                    # Single border draw for mem and bat together
-                    if arg_name == 'mem-bat': arg_name = 'mem'
-                    if kwargs.get('border', True) and arg.get("scope", None) != "panel":
-                        draw_app_border(arg_name, grid, background_value, idx)
+                persistent_draw, animate = render_panel(grid, _args, app_functions, foreground_value, background_value, panel)
                 do_animate = None
                 if idx_changed[draw_queue]:
                     do_animate = animate
@@ -746,6 +752,7 @@ def app(args, base_apps, plugin_apps):
             config_dir=platform_utils.user_config_dir(),
             log_file=platform_utils.log_file_path(),
             quit=shutdown_event.set,
+            edit_layout=lambda: open_layout_editor(args),
         )
         # The tray returns after Quit
         shutdown_event.set()
@@ -755,6 +762,12 @@ def app(args, base_apps, plugin_apps):
         run_main_loop()
 
     log.info("Exiting")
+
+def open_layout_editor(args):
+    editor_args = ['--edit-layout']
+    if args.config_file:
+        editor_args += ['--config-file', args.config_file]
+    platform_utils.launch_self(*editor_args)
 
 def use_tray(args):
     # Windows runs windowless with a tray icon; --no-tray keeps the console behaviour for debugging
@@ -803,10 +816,15 @@ def main(args):
     mode_group.add_argument("--disable-plugins", "-dp", action="store_true", help="Do not load any plugin code")
     mode_group.add_argument("--list-apps", "-la", action="store_true", help="List the installed apps, and exit")
     mode_group.add_argument("--config-file", "-cf", default=None, help="Absolute path to custom config file")
+    mode_group.add_argument("--edit-layout", action="store_true", help="Open the layout editor window instead of running the monitor")
     if IS_WINDOWS:
         mode_group.add_argument("--no-tray", action="store_true", help="Run in the console without a tray icon")
     
     args = parser.parse_args()
+    if args.edit_layout:
+        from led_mon.editor import run_editor
+        run_editor(args)
+        return
     app(args, base_apps, plugin_apps)
 
 if __name__ == "__main__":
