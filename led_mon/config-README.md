@@ -2,13 +2,15 @@
 
 Control the behavior of the app by settings in `config.yaml`. This file has default settings that are delivered as part of the codebase. To customise the behvaior, copy the settings to another file named `config-local.yaml` and make any desirfeed changes. If this file is present, it will be used instead of `config.yaml`.
 
+On Windows you can also use the layout editor (tray menu *Edit layout*) instead of editing this file; see the Windows section of the main `README.md`. It writes `config-local.yaml` for you.
+
 Configuration is specified for each of four quadrants, the top and bottom of the left and right LED Matrix panels. Each quadrant is a list containing one or more `app` items. These apps will be displayed in the quadrant in sequence, for a time specified by the `duration` parameter, cycling through the configured apps indefinitely.
 
 Here is an explanation of the parameters that can (or must) be specified for each app.
 
 **name** (required): The name of the app, which must match a key in `app_funcs`, as explained in `plugin-README.md`. Names must be unique within a quadrant.
 
-**duration** (optional): The number of seconds the app will be displayed before switching to the next one. If there is only one app in the quadrant, this parameter will have no effect. This paramater is optional only if a global `duration` value is specified.
+**duration** (optional): The number of seconds the app will be displayed before switching to the next one. The same app can have a different duration in each quadrant. If there is only one app in the quadrant, this parameter will have no effect. This paramater is optional only if a global `duration` value is specified.
 
 **scope** (optional): If set to `panel`, the app will be displayed on the entire panel instead of a single quandrant. The scheduler now enforces panel ownership: while a panel-scope app is active in either quadrant, the sibling quadrant on that side is suppressed for rendering and app rotation. If both top and bottom apps on the same side are active and both set `scope: panel`, the top quadrant app takes precedence and a warning is logged. For predictable behavior, configure one panel-scope app per side and set the sibling quadrant app to `display:false`.
 

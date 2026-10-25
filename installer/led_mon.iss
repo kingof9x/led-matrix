@@ -40,6 +40,7 @@ Source: "..\dist\led_mon\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdi
 
 [Icons]
 Name: "{group}\LED Matrix Monitor"; Filename: "{app}\led_mon.exe"
+Name: "{group}\LED Matrix Layout Editor"; Filename: "{app}\led_mon.exe"; Parameters: "--edit-layout"
 Name: "{group}\Uninstall LED Matrix Monitor"; Filename: "{uninstallexe}"
 
 [Registry]

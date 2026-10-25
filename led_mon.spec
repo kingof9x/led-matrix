@@ -26,6 +26,9 @@ hiddenimports = [
     'led_mon.patterns', 'led_mon.drawing', 'led_mon.shared_state', 'led_mon.framework_tool',
     'led_mon.equalizer_files.visualize',
     'led_mon.hotkeys',
+    # The layout editor is imported only when started with --edit-layout
+    'led_mon.rendering', 'led_mon.control', 'led_mon.editor', 'led_mon.editor.window', 'led_mon.editor.preview',
+    'led_mon.editor.layout', 'led_mon.editor.catalog', 'tkinter', 'tkinter.ttk', 'tkinter.messagebox',
 ]
 
 icon = None
