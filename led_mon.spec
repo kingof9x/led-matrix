@@ -28,6 +28,8 @@ hiddenimports = [
     # The layout editor is imported only when started with --edit-layout
     'led_mon.rendering', 'led_mon.control', 'led_mon.editor', 'led_mon.editor.window', 'led_mon.editor.preview',
     'led_mon.editor.layout', 'led_mon.editor.catalog', 'led_mon.hotkeys', 'tkinter', 'tkinter.ttk', 'tkinter.messagebox',
+    # Imported when the tray starts
+    'led_mon.tray', 'led_mon.brightness_popup', 'led_mon.app_settings', 'led_mon.external_apps', 'led_mon.startup',
 ]
 
 icon = None

@@ -44,10 +44,39 @@ Name: "{group}\LED Matrix Layout Editor"; Filename: "{app}\led_mon.exe"; Paramet
 Name: "{group}\Uninstall LED Matrix Monitor"; Filename: "{uninstallexe}"
 
 [Registry]
-; Start with Windows (can be turned off in Task Manager > Startup apps)
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "led_mon"; ValueData: """{app}\led_mon.exe"""; Flags: uninsdeletevalue
+; Start with Windows on a first install. After that it is up to the "Start with Windows" item in the
+; tray menu (the same registry value), so an update does not turn it back on.
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "led_mon"; ValueData: """{app}\led_mon.exe"""; Flags: uninsdeletevalue; Check: not IsUpgrade
 
 [Run]
 Filename: "{app}\led_mon.exe"; Description: "Launch led_mon"; Flags: nowait postinstall skipifsilent
 
 ; The user's config in %APPDATA%\led_mon is not touched by the uninstaller.
+
+[Code]
+var
+  WasInstalled: Boolean;
+
+function InitializeSetup(): Boolean;
+begin
+  // Decided before anything is written, so this install's own uninstall entry can't count
+  WasInstalled := RegValueExists(HKCU,
+    'Software\Microsoft\Windows\CurrentVersion\Uninstall\{6F5C3A51-2B7E-4C0B-9E5D-3C1A7F2B8D64}_is1',
+    'UninstallString');
+  Result := True;
+end;
+
+function IsUpgrade(): Boolean;
+begin
+  Result := WasInstalled;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  // Remove the startup entry even if it was turned on from the tray menu after installing
+  if CurUninstallStep = usUninstall then
+  begin
+    RegDeleteValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', 'led_mon');
+    RegDeleteValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run', 'led_mon');
+  end;
+end;
