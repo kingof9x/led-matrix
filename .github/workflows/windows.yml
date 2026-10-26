@@ -44,8 +44,16 @@ jobs:
       - name: Install PyInstaller with a launcher compiled from source
         shell: pwsh
         run: |
-          $env:PYINSTALLER_COMPILE_BOOTLOADER = "1"
-          python -m pip install --no-binary pyinstaller --no-cache-dir pyinstaller
+          python -m pip download --no-binary :all: --no-deps --no-cache-dir pyinstaller -d pyi-src
+          python -c "import glob, tarfile; tarfile.open(glob.glob('pyi-src/pyinstaller-*.tar.gz')[0]).extractall('pyi-src', filter='data')"
+          $src = (Get-ChildItem pyi-src -Directory | Select-Object -First 1).FullName
+          Push-Location "$src\bootloader"
+          python ./waf all --target-arch=64bit
+          if ($LASTEXITCODE -ne 0) { throw "Compiling the PyInstaller launcher failed" }
+          Pop-Location
+          python -m pip install $src
+          # Show the launcher's hash, to compare with the prebuilt one if needed
+          python -c "import hashlib, os, PyInstaller; p = os.path.join(os.path.dirname(PyInstaller.__file__), 'bootloader', 'Windows-64bit-intel', 'runw.exe'); print(p, hashlib.sha256(open(p, 'rb').read()).hexdigest())"
 
       - name: Install dependencies
         run: python -m pip install -r requirements.txt pytest
