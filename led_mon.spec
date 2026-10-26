@@ -51,9 +51,14 @@ if IS_WINDOWS:
     import tomllib
     from PyInstaller.utils.win32.versioninfo import (VSVersionInfo, FixedFileInfo, StringFileInfo, StringTable,
                                                      StringStruct, VarFileInfo, VarStruct)
-    with open('pyproject.toml', 'rb') as f:
-        app_version = tomllib.load(f)['project']['version']
-    version_tuple = tuple(int(p) for p in (app_version.split('.') + ['0'] * 4)[:4])
+    # A release build passes its version in LED_MON_VERSION; otherwise use the one in pyproject.toml
+    app_version = os.environ.get('LED_MON_VERSION', '').strip()
+    if not app_version:
+        with open('pyproject.toml', 'rb') as f:
+            app_version = tomllib.load(f)['project']['version']
+    import re
+    version_numbers = [int(n) for n in re.findall(r'\d+', app_version)]
+    version_tuple = tuple((version_numbers + [0] * 4)[:4])
     version_info = VSVersionInfo(
         ffi=FixedFileInfo(filevers=version_tuple, prodvers=version_tuple),
         kids=[

@@ -27,12 +27,16 @@ The `build_and_install.sh` script will automatically detect your Linux distribut
 
 ## Windows
 
-Two downloads are available on the [Releases](../../releases/latest) page (and as build artifacts of the *Windows build* GitHub Actions workflow). Neither needs Python.
+Download the latest release (neither needs Python):
 
 | File | What it is |
 |------|------------|
-| `led_mon.exe` | Portable app. Double-click to run, nothing is installed. |
-| `led_mon-setup-<version>.exe` | Installer for the same app. |
+| [`led_mon-setup.exe`](https://github.com/kingof9x/led-matrix/releases/latest/download/led_mon-setup.exe) | Installer. |
+| [`led_mon.exe`](https://github.com/kingof9x/led-matrix/releases/latest/download/led_mon.exe) | Portable app. Double-click to run, nothing is installed. |
+
+Release notes and older versions are on the [Releases](https://github.com/kingof9x/led-matrix/releases) page. Every push also builds both files as artifacts of the *Windows build* GitHub Actions workflow.
+
+**Making a release:** in GitHub go to *Actions > Windows build > Run workflow*, type a version such as `1.0.0`, and run it. When it finishes, the release `v1.0.0` appears on the Releases page with both files attached, and the download links above point to it. Pushing a tag such as `v1.0.0` does the same. Leaving the version empty makes a test build without a release.
 
 The installer installs for the current user only (no admin prompt) into `%LOCALAPPDATA%\Programs\led_mon`, adds a Start menu shortcut, and makes the app **start automatically when you log in**. That's the only difference from the portable exe. You can turn auto-start on or off with *Start with Windows* in the tray menu (this works for the portable exe too), or in *Task Manager > Startup apps* (entry `led_mon`). Updating with a newer installer keeps your choice. Uninstall from *Settings > Apps*; this removes the app and the startup entry but keeps your config.
 
@@ -90,7 +94,7 @@ python -m led_mon.led_system_monitor --edit-layout      # the layout editor
 python -m PyInstaller led_mon.spec --noconfirm            # one-dir build: dist\led_mon\led_mon.exe
 $env:LED_MON_ONEFILE = "1"; python -m PyInstaller led_mon.spec --noconfirm --workpath build\onefile   # dist\led_mon.exe
 # Installer (needs Inno Setup 6):
-& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion=2.1.2 installer\led_mon.iss   # dist\led_mon-setup-2.1.2.exe
+& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion=2.1.2 installer\led_mon.iss   # dist\led_mon-setup.exe
 ```
 
 ## Capabilities

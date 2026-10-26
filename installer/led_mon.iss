@@ -1,7 +1,7 @@
 ; Inno Setup 6 script for the Windows installer of the Framework 16 LED Matrix monitor.
 ; Build after the one-dir PyInstaller build (dist\led_mon\):
 ;   iscc /DAppVersion=2.1.2 installer\led_mon.iss
-; Output: dist\led_mon-setup-<version>.exe
+; Output: dist\led_mon-setup.exe (same name in every release, so download links keep working)
 ;
 ; The installed app is the same as the portable exe, except that it starts when the user logs in.
 
@@ -22,7 +22,7 @@ DisableDirPage=yes
 ; Per-user install, no admin prompt
 PrivilegesRequired=lowest
 OutputDir=..\dist
-OutputBaseFilename=led_mon-setup-{#AppVersion}
+OutputBaseFilename=led_mon-setup
 SetupIconFile=..\build\led_mon.ico
 UninstallDisplayIcon={app}\led_mon.exe
 UninstallDisplayName=LED Matrix Monitor
