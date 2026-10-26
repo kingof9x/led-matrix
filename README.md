@@ -51,7 +51,7 @@ Only one copy runs at a time; starting it again does nothing.
 
 **Layout editor.** Instead of editing the config file by hand, open *Edit layout* from the tray menu (or *LED Matrix Layout Editor* in the Start menu, or run `led_mon.exe --edit-layout`).
 
-* The list on the left shows the available apps. Half-panel apps (CPU cores, CPU graph, GPU graph, memory + battery, disk, network, disk + network, temperatures, fans) go in the top or bottom half of a panel; whole-panel apps (clock, weather, equalizer, picture) fill it.
+* The list on the left shows the available apps. Half-panel apps (CPU cores, CPU graph, GPU graph, memory + battery, disk, network, disk + network, temperatures, fans) go in the top or bottom half of a panel; whole-panel apps (clock, weather, equalizer, FPS counter, picture) fill it.
 * Each panel shows a list of *pages*, shown in turn for the number of seconds you set. Drag an app onto a panel to put it on the selected page, or select a slot and double-click an app. Click an app on the panel to change its settings on the right.
 * The panel pictures are a live preview, drawn with the same code as the real panels and your computer's current values. The equalizer preview shows made-up bars.
 * *Apply to panels* saves the layout to `%APPDATA%\led_mon\config-local.yaml` (the previous file is kept as `config-local.yaml.bak`) and the running app switches to it straight away.
@@ -70,6 +70,16 @@ Only one copy runs at a time; starting it again does nothing.
 * Close other programs that use the panels (such as the LED Matrix GUI, `ledmatrixgui.exe`) before starting the app: on Windows only one program can open a panel's port at a time.
 
 **Temperatures and fans.** Windows has no standard API for these, so the `temp` and `fan` apps use Framework's `framework_tool`. Download `framework_tool.exe` from the [framework-system releases](https://github.com/FrameworkComputer/framework-system/releases) and put it next to `led_mon.exe` (for the installed app: `%LOCALAPPDATA%\Programs\led_mon`) or anywhere on your `PATH`. Check that `framework_tool --thermal` prints temperatures in a terminal. Without it, those apps show empty bars and the log says why.
+
+**FPS counter.** The `fps` app shows the frames per second of a game, with a graph of the last few seconds below. It follows whichever app is in front, or set *App to watch* in the layout editor to a program's file name (such as `eldenring.exe`). It uses Intel's [PresentMon](https://github.com/GameTechDev/PresentMon) (MIT licence), which the installer puts next to `led_mon.exe`. With the portable exe, download the console exe (`PresentMon-<version>-x64.exe`) from the [PresentMon releases](https://github.com/GameTechDev/PresentMon/releases), rename it to `PresentMon.exe` and put it next to `led_mon.exe`.
+
+Windows only lets programs read frame timing when they run as administrator or the account is in the *Performance Log Users* group. One-time setup: open *Terminal (Admin)* or *PowerShell (Admin)* from the Start button's right-click menu, run
+
+```powershell
+Add-LocalGroupMember -SID S-1-5-32-559 -Member "$env:USERDOMAIN\$env:USERNAME"
+```
+
+then sign out and back in (S-1-5-32-559 is that group in every Windows language). Until then the app shows a `?` and the log says why. FPS isn't available on Linux.
 
 **Equalizer.** The equalizer listens to whatever is playing on the default output device (speakers or headphones) and follows a switch between them. It does not need `inputmodule-control` on Windows. `input-mode: microphone` uses the default microphone.
 
@@ -103,6 +113,7 @@ $env:LED_MON_ONEFILE = "1"; python -m PyInstaller led_mon.spec --noconfirm --wor
   * Disk Input/Output rates 
   * Network Upload/Download rates
   * Disk and network together in one half panel
+  * Frames per second of a game (Windows)
   * Temperature sensor readings
   * Fan speeds
 * Other apps

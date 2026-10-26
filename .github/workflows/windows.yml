@@ -72,6 +72,26 @@ jobs:
       - name: Build one-dir (for the installer)
         run: python -m PyInstaller led_mon.spec --noconfirm --clean --workpath build\onedir
 
+      # The fps app runs Intel's PresentMon (MIT licence). The installer ships it next to led_mon.exe;
+      # it isn't packed inside the portable exe, since an exe hidden inside another looks suspicious to scanners.
+      - name: Add PresentMon to the installed app
+        shell: pwsh
+        env:
+          PRESENTMON_VERSION: v2.6.0
+        run: |
+          $headers = @{ Authorization = "Bearer ${{ github.token }}"; "X-GitHub-Api-Version" = "2022-11-28" }
+          $release = Invoke-RestMethod -Headers $headers "https://api.github.com/repos/GameTechDev/PresentMon/releases/tags/$env:PRESENTMON_VERSION"
+          $asset = @($release.assets | Where-Object { $_.name -match '^PresentMon-[\d.]+-x64\.exe$' })
+          if ($asset.Count -ne 1) {
+            $release.assets | ForEach-Object { Write-Host $_.name }
+            throw "Expected one PresentMon console exe in release $env:PRESENTMON_VERSION"
+          }
+          Write-Host "Using $($asset[0].name)"
+          Invoke-WebRequest -Headers $headers $asset[0].browser_download_url -OutFile dist\led_mon\PresentMon.exe
+          $license = Invoke-RestMethod -Headers $headers "https://api.github.com/repos/GameTechDev/PresentMon/license?ref=$env:PRESENTMON_VERSION"
+          [IO.File]::WriteAllBytes("$PWD\dist\led_mon\PresentMon-LICENSE.txt", [Convert]::FromBase64String($license.content))
+          Get-AuthenticodeSignature dist\led_mon\PresentMon.exe | Format-List Status, SignerCertificate
+
       - name: Build one-file (portable exe)
         shell: pwsh
         run: |
