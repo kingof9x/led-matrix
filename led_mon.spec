@@ -31,6 +31,7 @@ hiddenimports = [
 ]
 
 icon = None
+version_info = None
 if IS_WINDOWS:
     hiddenimports += [
         'soundcard', 'pystray', 'pystray._win32', 'PIL', 'PIL.ImageTk', 'wmi', 'win32com', 'win32com.client', 'pythoncom',
@@ -44,6 +45,29 @@ if IS_WINDOWS:
     os.makedirs('build', exist_ok=True)
     icon = os.path.join('build', 'led_mon.ico')
     make_icon_image(256).save(icon, sizes=[(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
+    # Version details shown in the exe's Properties; an exe without them looks more suspicious to scanners
+    import tomllib
+    from PyInstaller.utils.win32.versioninfo import (VSVersionInfo, FixedFileInfo, StringFileInfo, StringTable,
+                                                     StringStruct, VarFileInfo, VarStruct)
+    with open('pyproject.toml', 'rb') as f:
+        app_version = tomllib.load(f)['project']['version']
+    version_tuple = tuple(int(p) for p in (app_version.split('.') + ['0'] * 4)[:4])
+    version_info = VSVersionInfo(
+        ffi=FixedFileInfo(filevers=version_tuple, prodvers=version_tuple),
+        kids=[
+            StringFileInfo([StringTable('040904B0', [
+                StringStruct('CompanyName', 'led-matrix contributors'),
+                StringStruct('FileDescription', 'LED Matrix Monitor for the Framework 16'),
+                StringStruct('FileVersion', app_version),
+                StringStruct('InternalName', 'led_mon'),
+                StringStruct('LegalCopyright', 'MIT License'),
+                StringStruct('OriginalFilename', 'led_mon.exe'),
+                StringStruct('ProductName', 'LED Matrix Monitor'),
+                StringStruct('ProductVersion', app_version),
+            ])]),
+            VarFileInfo([VarStruct('Translation', [1033, 1200])]),
+        ],
+    )
 else:
     hiddenimports += ['pynput', 'sounddevice', 'pulsectl']
 
@@ -70,7 +94,8 @@ exe_options = dict(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    # No UPX: antivirus scanners treat UPX-packed executables as suspicious
+    upx=False,
     # Windows runs windowless with a tray icon; Linux stays a console app (systemd service)
     console=not IS_WINDOWS,
     disable_windowed_traceback=False,
@@ -79,6 +104,7 @@ exe_options = dict(
     codesign_identity=None,
     entitlements_file=None,
     icon=icon,
+    version=version_info,
 )
 
 if ONEFILE:
@@ -105,7 +131,8 @@ else:
         a.binaries,
         a.datas,
         strip=False,
-        upx=True,
+        # No UPX: antivirus scanners treat UPX-packed executables as suspicious
+    upx=False,
         upx_exclude=[],
         name='led_mon',
     )
