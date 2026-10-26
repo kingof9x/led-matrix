@@ -27,7 +27,7 @@ hiddenimports = [
     'led_mon.equalizer_files.visualize',
     # The layout editor is imported only when started with --edit-layout
     'led_mon.rendering', 'led_mon.control', 'led_mon.editor', 'led_mon.editor.window', 'led_mon.editor.preview',
-    'led_mon.editor.layout', 'led_mon.editor.catalog', 'led_mon.hotkeys', 'tkinter', 'tkinter.ttk', 'tkinter.messagebox',
+    'led_mon.editor.layout', 'led_mon.editor.catalog', 'led_mon.hotkeys', 'led_mon.gpu', 'tkinter', 'tkinter.ttk', 'tkinter.messagebox',
     # Imported when the tray starts
     'led_mon.tray', 'led_mon.brightness_popup', 'led_mon.app_settings', 'led_mon.external_apps', 'led_mon.startup',
 ]
@@ -37,7 +37,7 @@ version_info = None
 if IS_WINDOWS:
     hiddenimports += [
         'soundcard', 'pystray', 'pystray._win32', 'PIL', 'PIL.ImageTk', 'wmi', 'win32com', 'win32com.client', 'pythoncom',
-        'serial.tools.list_ports_windows', 'tzdata',
+        'serial.tools.list_ports_windows', 'tzdata', 'win32pdh',
     ]
     # soundcard reads its C header at runtime; zoneinfo needs the tzdata database on Windows
     datas += collect_data_files('soundcard') + collect_data_files('tzdata')

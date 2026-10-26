@@ -22,7 +22,7 @@ APP = "app"
 class Setting:
     key: str
     label: str
-    kind: str                     # bool | choice | text | int | list | multi | snapshot
+    kind: str                     # bool | choice | text | int | list | multi | snapshot | gpu
     default: object = None
     options: tuple = ()
     target: str = ARGS
@@ -42,7 +42,12 @@ class AppInfo:
 
 
 APPS = [
-    AppInfo("cpu", "CPU", "Load on each CPU core, drawn as small spirals.", HALF),
+    AppInfo("cpu", "CPU cores", "Load on each CPU core, drawn as small spirals (or a bar per core when there are more than eight).", HALF),
+    AppInfo("cpu-graph", "CPU graph", "Overall CPU use over the last 15 seconds. Each row is one second, newest at the top; a longer row is a busier CPU.", HALF),
+    AppInfo("gpu-graph", "GPU graph", "Overall GPU use over the last 15 seconds, like the CPU graph.", HALF, [
+        Setting("gpu", "GPU", "gpu", None, help="Which graphics card to show, when the computer has more than one"),
+    ]),
+    AppInfo("disk-net", "Disk + network", "Disk read and write bars on the upper part, network upload and download bars on the lower part.", HALF),
     AppInfo("mem-bat", "Memory + battery", "Memory use on top, battery level below (pulses when charging).", HALF),
     AppInfo("disk", "Disk", "Disk read (left bar) and write (right bar) activity.", HALF),
     AppInfo("net", "Network", "Upload (left bar) and download (right bar) activity.", HALF),
@@ -107,6 +112,20 @@ def snapshot_files(side):
     return sorted(names)
 
 
+# Shown in the GPU picker for "no gpu arg"
+FIRST_GPU = "First GPU found"
+
+
+def gpu_options():
+    """Choices for the GPU picker: (value, label), the first meaning no gpu arg."""
+    try:
+        from led_mon.gpu import gpu_names
+        names = gpu_names()
+    except Exception:
+        names = []
+    return [("", FIRST_GPU)] + [(n, n) for n in names]
+
+
 def new_app(name, side):
     """A config entry for a newly placed app, with default settings."""
     info = get(name)
@@ -118,7 +137,7 @@ def new_app(name, side):
             value = files[0] if files else None
         else:
             value = copy.deepcopy(s.default)
-        if value in (None, "", []) and s.kind in ("text", "list", "snapshot"):
+        if value in (None, "", []) and s.kind in ("text", "list", "snapshot", "gpu"):
             continue
         if s.target == APP:
             entry[s.key] = value

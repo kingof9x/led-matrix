@@ -96,6 +96,70 @@ def draw_bar(grid, bar_ratio, bar_value, bar_x_offset = 1, y=0):
         else:
             grid[bar_x_offset+i,1:1+pixels_col] = bar_value
             
+# Rows inside a half panel's border: 15 for the top half (rows 1-15), 16 for the bottom (17-32)
+def half_rows(y):
+    return range(y + 1, 16) if y == 0 else range(y + 1, 33)
+
+# Lights a horizontal bar from column 1, up to 7 pixels long; a partly filled last pixel is dimmer
+def draw_hbar(grid, ratio, fill_value, row, width = 7):
+    length = max(0.0, min(1.0, ratio)) * width
+    full = int(length)
+    grid[1:1+full, row] = fill_value
+    if full < width:
+        grid[1+full, row] = int(round(fill_value * (length - full)))
+
+# One horizontal bar per core, for CPUs with more cores than the eight spirals fit.
+# More cores than rows (not on any Framework 16 CPU) are averaged in pairs, and so on.
+def draw_core_bars(grid, core_values, fill_value, y):
+    rows = list(half_rows(y))
+    per_row = -(-len(core_values) // len(rows)) # Ceiling division
+    values = [sum(core_values[i:i+per_row]) / len(core_values[i:i+per_row])
+              for i in range(0, len(core_values), per_row)]
+    for row, v in zip(rows, values):
+        draw_hbar(grid, v, fill_value, row)
+
+# The cpu app: a spiral per core when there are up to eight, otherwise a bar per core
+cpu_core_count = 0
+def draw_cpu_vals(grid, cpu_values, fill_value, y):
+    global cpu_core_count
+    cpu_core_count = len(cpu_values)
+    if len(cpu_values) <= 8:
+        draw_spiral_vals(grid, cpu_values, fill_value, y)
+    else:
+        draw_core_bars(grid, cpu_values, fill_value, y)
+
+# Scrolling graph filling a half panel: one row per reading, newest at the top,
+# each row a bar as long as the reading (None draws an empty row)
+def draw_history_graph(grid, values, fill_value, y):
+    for row, v in zip(half_rows(y), values):
+        if v is not None:
+            draw_hbar(grid, v, fill_value, row)
+
+# Two short bars that grow upwards from row bottom, 3 columns wide at bar_x_offset
+def draw_short_bar(grid, bar_ratio, bar_value, bar_x_offset, top, bottom):
+    bar_width = 3
+    bar_height = bottom - top + 1
+    lit_pixels = int(round(bar_height * bar_width * max(0.0, min(1.0, bar_ratio))))
+    pixels_base = lit_pixels // bar_width
+    remainder = lit_pixels % bar_width
+    for i in range(bar_width):
+        pixels_col = pixels_base
+        if i < remainder:
+            pixels_col += 1
+        if pixels_col:
+            grid[bar_x_offset+i, bottom+1-pixels_col:bottom+1] = bar_value
+
+# Disk on the upper part of the half panel (read left, write right), network on the
+# lower part (upload left, download right), like the separate disk and net apps
+def draw_disk_net(grid, disk_values, net_values, fill_value, y):
+    rows = list(half_rows(y))
+    disk_top, disk_bottom = rows[0], rows[6]
+    net_top, net_bottom = rows[8], rows[-1]
+    draw_short_bar(grid, disk_values[0], fill_value, 1, disk_top, disk_bottom)
+    draw_short_bar(grid, disk_values[1], fill_value, 5, disk_top, disk_bottom)
+    draw_short_bar(grid, net_values[0], fill_value, 1, net_top, net_bottom)
+    draw_short_bar(grid, net_values[1], fill_value, 5, net_top, net_bottom)
+
 warned = set()
 def draw_snapshot(grid, fill_value, **kwargs):
     global warned
@@ -173,6 +237,26 @@ def draw_1_x_2_vert_grid(grid, border_value, y, y_split_idx = 3):
     grid[0, y:y+height] = border_value # Left
     grid[8, y:y+height] = border_value # Right
     
+# Draws a plain border around a 16 (top segment) or a 17 (bottom segment) row section
+def draw_half_outline(grid, border_value, y):
+    height = 16 if y == 0 else 17
+    grid[:, y] = border_value # Top
+    grid[:, y+height] = border_value # Bottom
+    grid[0, y:y+height] = border_value # Left
+    grid[8, y:y+height] = border_value # Right
+
+# The cpu app's border: the 2 x 4 grid around spirals, or a plain outline around core bars
+def draw_cpu_border(grid, border_value, y):
+    if cpu_core_count <= 8:
+        draw_8_x_8_grid(grid, border_value, y)
+    else:
+        draw_half_outline(grid, border_value, y)
+
+# The disk-net app's border: split into left and right bars, and into a disk and a network part
+def draw_disk_net_border(grid, border_value, y):
+    draw_2_x_1_horiz_grid(grid, border_value, y)
+    grid[:, y+8] = border_value
+
 # Draws a border around the entire panel, split
 # vertically into two equal segments
 def draw_outline_border(grid, border_value):
@@ -185,8 +269,20 @@ def draw_outline_border(grid, border_value):
 # Maps an app arg value to abstract app and border draw functions
 direct_draw_funcs = {
     "cpu": {
-        "fn": draw_spiral_vals,
-        "border": draw_8_x_8_grid
+        "fn": draw_cpu_vals,
+        "border": draw_cpu_border
+    },
+    "cpu-graph": {
+        "fn": draw_history_graph,
+        "border": draw_half_outline
+    },
+    "gpu-graph": {
+        "fn": draw_history_graph,
+        "border": draw_half_outline
+    },
+    "disk-net": {
+        "fn": draw_disk_net,
+        "border": draw_disk_net_border
     },
     "disk": {
         "fn": draw_bar,

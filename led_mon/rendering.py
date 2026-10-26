@@ -6,6 +6,8 @@ import logging
 
 # Internal Dependencies
 from led_mon.drawing import draw_app, draw_app_border
+from led_mon.monitors import HistoryMonitor, overall_cpu_ratio
+from led_mon import gpu as gpu_info
 
 log = logging.getLogger(__name__)
 
@@ -15,23 +17,26 @@ DEFAULT_BACKGROUND = 35
 
 
 def make_base_app_functions(cpu_monitor, memory_monitor, battery_monitor, disk_monitor, network_monitor):
-    """The built-in apps, keyed by app name. Plugins add more (see plugins-README.md)."""
-    def draw_cpu(arg, grid, foreground_value, idx):
+    """The built-in apps, keyed by app name. Plugins add more (see plugins-README.md).
+
+    Each takes **kwargs so app args meant for the renderer (such as border: false) are ignored.
+    """
+    def draw_cpu(arg, grid, foreground_value, idx, **kwargs):
         last_cpu_values = cpu_monitor.get()
         draw_app(arg, grid, last_cpu_values, foreground_value, idx)
 
-    def draw_mem_bat(arg, grid, foreground_value, idx):
+    def draw_mem_bat(arg, grid, foreground_value, idx, **kwargs):
         last_memory_values = memory_monitor.get()
         last_battery_values = battery_monitor.get()
         draw_app("mem", grid, last_memory_values, foreground_value, idx)
         draw_app("bat", grid, last_battery_values[0], last_battery_values[1], foreground_value, idx+3)
 
-    def draw_disk(arg, grid, foreground_value, idx):
+    def draw_disk(arg, grid, foreground_value, idx, **kwargs):
         last_disk_read, last_disk_write = disk_monitor.get()
         draw_app(arg, grid, last_disk_read, foreground_value, bar_x_offset=1, y=idx) # Read
         draw_app(arg, grid, last_disk_write, foreground_value, bar_x_offset=5, y=idx) # Write
 
-    def draw_net(arg, grid, foreground_value, idx):
+    def draw_net(arg, grid, foreground_value, idx, **kwargs):
         last_network_upload, last_network_download = network_monitor.get()
         draw_app(arg, grid, last_network_upload, foreground_value, bar_x_offset=1, y=idx)
         draw_app(arg, grid, last_network_download, foreground_value, bar_x_offset=5, y=idx)
@@ -39,12 +44,30 @@ def make_base_app_functions(cpu_monitor, memory_monitor, battery_monitor, disk_m
     def draw_snap(arg, grid, foreground_value, idx, **kwargs):
         draw_app(arg, grid, foreground_value, **kwargs)
 
+    cpu_history = HistoryMonitor(overall_cpu_ratio)
+    def draw_cpu_graph(arg, grid, foreground_value, idx, **kwargs):
+        draw_app(arg, grid, cpu_history.get(), foreground_value, idx)
+
+    # One history per GPU, keyed by the gpu arg (blank: the first GPU found)
+    gpu_histories = {}
+    def draw_gpu_graph(arg, grid, foreground_value, idx, gpu=None, **kwargs):
+        key = gpu or ""
+        if key not in gpu_histories:
+            gpu_histories[key] = HistoryMonitor(lambda: gpu_info.shared_monitor().get(key or None))
+        draw_app(arg, grid, gpu_histories[key].get(), foreground_value, idx)
+
+    def draw_disk_net(arg, grid, foreground_value, idx, **kwargs):
+        draw_app(arg, grid, disk_monitor.get(), network_monitor.get(), foreground_value, idx)
+
     return {
         "cpu": draw_cpu,
         "mem-bat": draw_mem_bat,
         "disk": draw_disk,
         "net": draw_net,
         "snap": draw_snap,
+        "cpu-graph": draw_cpu_graph,
+        "gpu-graph": draw_gpu_graph,
+        "disk-net": draw_disk_net,
         "none": lambda *x: x # noop
     }
 
