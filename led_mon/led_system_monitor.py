@@ -24,6 +24,7 @@ from led_mon.shared_state import discover_led_devices
 from led_mon.serial_ports import close_all as close_all_ports
 from led_mon.rendering import make_base_app_functions, build_app_kwargs, render_panel
 from led_mon import control
+from led_mon import app_settings
 
 # External Dependencies
 import numpy as np
@@ -116,6 +117,19 @@ def set_freeze(frozen):
 
 def is_frozen_switching():
     return freeze_app_switching
+
+# Set while the animation is stopped from the tray: the panels go dark until it is started again
+display_paused = threading.Event()
+
+def set_paused(paused):
+    if paused:
+        display_paused.set()
+    else:
+        display_paused.clear()
+    log.info("Animation " + ("stopped" if paused else "started"))
+
+def is_paused():
+    return display_paused.is_set()
 
 # pynput key helpers: Windows reports left/right Alt as alt_l / alt_r (or alt_gr)
 def is_alt_key(key):
@@ -311,6 +325,8 @@ def app(args, base_apps, plugin_apps):
     max_background_brightness = 35
     min_foreground_brightness = 24
     max_foreground_brightness = 160
+    # Follows the screen brightness unless a level was picked with the brightness slider
+    brightness = app_settings.Brightness()
 
     cpu_monitor = CPUMonitor()
     memory_monitor = MemoryMonitor()
@@ -481,12 +497,16 @@ def app(args, base_apps, plugin_apps):
         log.info("Config reloaded")
 
     previewing = False
+    blanked = False
 
     def handle_control_request(message):
         cmd = message.get('cmd')
         if cmd == 'status':
             return {'ports': [device for _, device in led_devices],
-                    'config_file': platform_utils.resolve_config_file(args.config_file)}
+                    'config_file': platform_utils.resolve_config_file(args.config_file),
+                    'brightness': brightness.get()}
+        if cmd == 'brightness':
+            return {'brightness': brightness.set(message.get('follow_screen'), message.get('level'))}
         if cmd == 'reload':
             clear_preview()
             reload_config_event.set()
@@ -507,12 +527,29 @@ def app(args, base_apps, plugin_apps):
 
     def render_iteration(args):
         global latch_key_combo, next_key_fired, freeze_app_switching, evdev_next_key_pressed
-        nonlocal previewing
+        nonlocal previewing, blanked
         try:
             if reload_config_event.is_set():
                 reload_config_event.clear()
                 reload_config()
-            screen_brightness = get_monitor_brightness()
+
+            # Animation stopped from the tray: turn the panels off once, then wait
+            if display_paused.is_set():
+                if not blanked:
+                    # Stop apps that draw on their own (the equalizer) so they don't light the panels
+                    dispose_active_apps()
+                    for draw_queue in drawing_queues:
+                        # Stop any panel animation, then draw a dark frame once it has stopped
+                        draw_queue.put((np.zeros((9,34), dtype = int), False))
+                        draw_queue.put((np.zeros((9,34), dtype = int), None))
+                    blanked = True
+                time.sleep(0.25)
+                # Restart panel animations when the display comes back, as after the ID display
+                latch_key_combo = True
+                return
+            blanked = False
+
+            screen_brightness = brightness.ratio(get_monitor_brightness)
             background_value = int(screen_brightness * (max_background_brightness - min_background_brightness) + min_background_brightness)
             foreground_value = int(screen_brightness * (max_foreground_brightness - min_foreground_brightness) + min_foreground_brightness)
             shared_state.foreground_value = foreground_value
@@ -755,6 +792,8 @@ def app(args, base_apps, plugin_apps):
         from led_mon import tray
         main_loop_thread = Thread(target=run_main_loop, daemon=True)
         main_loop_thread.start()
+        from led_mon.brightness_popup import TrayBrightnessPopup
+        brightness_popup = TrayBrightnessPopup(brightness)
         tray.run_tray(
             identify=request_identify,
             next_app=request_next_app,
@@ -765,8 +804,13 @@ def app(args, base_apps, plugin_apps):
             log_file=platform_utils.log_file_path(),
             quit=shutdown_event.set,
             edit_layout=lambda: open_layout_editor(args),
+            set_paused=set_paused,
+            is_paused=is_paused,
+            show_brightness=brightness_popup.show,
+            ohm_path=app_settings.load_settings().get("open_hardware_monitor_path", ""),
         )
         # The tray returns after Quit
+        brightness_popup.stop()
         shutdown_event.set()
         main_loop_thread.join(timeout=5)
         shutdown()

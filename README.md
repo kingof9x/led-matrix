@@ -34,9 +34,18 @@ Two downloads are available on the [Releases](../../releases/latest) page (and a
 | `led_mon.exe` | Portable app. Double-click to run, nothing is installed. |
 | `led_mon-setup-<version>.exe` | Installer for the same app. |
 
-The installer installs for the current user only (no admin prompt) into `%LOCALAPPDATA%\Programs\led_mon`, adds a Start menu shortcut, and makes the app **start automatically when you log in**. That's the only difference from the portable exe. You can turn auto-start off in *Task Manager > Startup apps* (entry `led_mon`). Uninstall from *Settings > Apps*; this removes the app and the startup entry but keeps your config.
+The installer installs for the current user only (no admin prompt) into `%LOCALAPPDATA%\Programs\led_mon`, adds a Start menu shortcut, and makes the app **start automatically when you log in**. That's the only difference from the portable exe. You can turn auto-start on or off with *Start with Windows* in the tray menu (this works for the portable exe too), or in *Task Manager > Startup apps* (entry `led_mon`). Updating with a newer installer keeps your choice. Uninstall from *Settings > Apps*; this removes the app and the startup entry but keeps your config.
 
-On Windows the app runs without a window and shows an icon in the system tray (you may need to open the `^` overflow area). The tray menu has *Edit layout* (also opened by double-clicking the icon), *Identify panels*, *Next app*, *Freeze app switching*, *Open config folder*, *Open log*, *Reload config* and *Quit*. Only one copy runs at a time; starting it again does nothing.
+On Windows the app runs without a window and shows an icon in the system tray (you may need to open the `^` overflow area). Left- or right-click the icon to open the tray menu:
+
+* *Edit layout* opens the layout editor (below).
+* *Brightness* pops up a small slider next to the tray. Moving it sets the panel brightness yourself; tick *Follow screen brightness* to go back to following the screen (the default). Click anywhere else or press `Esc` to close it. The choice is kept in `%APPDATA%\led_mon\settings.json`.
+* *Stop animation* turns the panels off until you choose *Start animation*; the tray icon turns grey while stopped.
+* *Identify panels*, *Next app* and *Freeze app switching* do the same as the keyboard shortcuts below.
+* *Open Hardware Monitor* and *Open Framework Control* appear when those programs are found, and open them (or bring Open Hardware Monitor forward if it is already running). If Open Hardware Monitor is somewhere unusual, put its path in `settings.json` as `"open_hardware_monitor_path"`.
+* *Open config folder*, *Open log*, *Reload config*, *Start with Windows* (a checkbox) and *Quit*.
+
+Only one copy runs at a time; starting it again does nothing.
 
 **Keyboard shortcuts on Windows** are `Ctrl` + `Alt` + `Shift` with the same letters as on Linux: `I` shows the app names for a few seconds, `N` shows the next app, `F` freezes app switching and `U` unfreezes it. They use the Windows hotkey feature, so the app only hears about these four shortcuts and never sees other keystrokes (`--no-key-listener` turns them off). The extra modifiers keep them from taking `Alt` + `F` and the like away from other programs.
 
@@ -47,6 +56,7 @@ On Windows the app runs without a window and shows an icon in the system tray (y
 * The panel pictures are a live preview, drawn with the same code as the real panels and your computer's current values. The equalizer preview shows made-up bars.
 * *Apply to panels* saves the layout to `%APPDATA%\led_mon\config-local.yaml` (the previous file is kept as `config-local.yaml.bak`) and the running app switches to it straight away.
 * *Send preview* shows the current preview on the panels as a still picture for 30 seconds (or until *Resume monitor*), without saving. When the app isn't running, the editor sends the picture to the panels itself.
+* The *Brightness* slider under the app list changes the panel brightness straight away (no need to Apply), the same as the tray slider.
 * The *Port* boxes pin a panel to a COM port (the `left-port` / `right-port` settings); that takes effect the next time the app starts.
 
 **Where things live**

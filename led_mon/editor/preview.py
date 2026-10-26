@@ -10,7 +10,7 @@ import logging
 import importlib.util
 
 # Internal Dependencies
-from led_mon import platform_utils, control
+from led_mon import platform_utils, control, app_settings
 from led_mon.rendering import make_base_app_functions, render_panel, DEFAULT_FOREGROUND, DEFAULT_BACKGROUND
 from led_mon.monitors import CPUMonitor, MemoryMonitor, BatteryMonitor, DiskMonitor, NetworkMonitor
 from led_mon.equalizer_files.visualize import eq_grid
@@ -87,6 +87,26 @@ def monitor_status():
     """The running monitor's status ({'ports': [...]}), or None if it isn't running."""
     reply = control.request({"cmd": "status"}, timeout=1.5)
     return reply if reply and reply.get("ok") else None
+
+
+def brightness():
+    """The brightness choice ({'follow_screen': bool, 'level': 0-100}): the running monitor's, or the saved one."""
+    status = monitor_status()
+    if status and status.get("brightness"):
+        return status["brightness"]
+    return app_settings.Brightness().get()
+
+
+def set_brightness(follow_screen, level):
+    """Change the panel brightness. The running monitor applies and saves it; otherwise it is saved for next start.
+
+    Returns True if the running monitor took it.
+    """
+    reply = control.request({"cmd": "brightness", "follow_screen": follow_screen, "level": level})
+    if reply is not None and reply.get("ok"):
+        return True
+    app_settings.Brightness().set(follow_screen, level)
+    return False
 
 
 def send_frames(frames, seconds=30):

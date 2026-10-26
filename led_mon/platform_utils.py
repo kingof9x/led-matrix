@@ -199,6 +199,17 @@ def init_com_for_thread():
         log.debug(f"CoInitialize failed: {e}")
 
 
+def enable_dpi_awareness():
+    """Sharp text on high-DPI screens (Windows); must be set before the process's first window."""
+    if not IS_WINDOWS:
+        return
+    try:
+        import ctypes
+        ctypes.windll.shcore.SetProcessDpiAwareness(1)
+    except Exception:
+        pass
+
+
 def subprocess_flags():
     """creationflags that stop a console window flashing up when a windowless app runs a tool."""
     if IS_WINDOWS:
