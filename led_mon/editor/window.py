@@ -10,10 +10,11 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 
 # Internal Dependencies
-from led_mon import platform_utils
+from led_mon import platform_utils, app_settings
 from led_mon.editor import catalog, layout as layout_mod
 from led_mon.editor.layout import Page, SIDES
 from led_mon.editor import preview
+from led_mon.brightness_popup import BrightnessControl
 
 log = logging.getLogger(__name__)
 
@@ -438,6 +439,7 @@ class LayoutEditor:
         threading.Thread(target=self.preview_loop, daemon=True).start()
         self.root.after(100, self.poll_frames)
         self.root.after(200, self.check_monitor)
+        self.load_brightness()
 
     # Files
     def config_paths(self):
@@ -483,6 +485,12 @@ class LayoutEditor:
                                   "or bottom half;\nwhole-panel apps fill the page.", wraplength=230,
                                   justify="left", foreground="#555555")
         self.app_help.pack(anchor="w", pady=(6, 0))
+        # Panel brightness: changes the running monitor straight away, no Apply needed
+        state = app_settings.Brightness().get()
+        self.brightness_pending = None
+        self.brightness = BrightnessControl(palette, state["follow_screen"], state["level"], self.on_brightness_changed,
+                                            length=230)
+        self.brightness.pack(anchor="w", fill="x", pady=(12, 0))
 
         self.panels = {}
         for column, side in enumerate(SIDES, start=1):
@@ -720,6 +728,27 @@ class LayoutEditor:
         if not self.status.cget("text") or was_running != (status is not None) or self.status.cget("text").startswith(("Monitor is", "The monitor isn't")):
             self.set_status(text)
 
+    def load_brightness(self):
+        def run():
+            state = preview.brightness()
+            self.call_soon(lambda: self.brightness.set_state(state["follow_screen"], state["level"]))
+        threading.Thread(target=run, daemon=True).start()
+
+    def on_brightness_changed(self, follow_screen, level):
+        # The slider sends many changes while dragging; send the latest one a moment after it stops
+        first = self.brightness_pending is None
+        self.brightness_pending = (follow_screen, level)
+        if first:
+            self.root.after(150, self.send_brightness)
+
+    def send_brightness(self):
+        follow_screen, level = self.brightness_pending
+        self.brightness_pending = None
+
+        def run():
+            preview.set_brightness(follow_screen, level)
+        threading.Thread(target=run, daemon=True).start()
+
     # Actions
     def preview_frames(self):
         target = self.send_target.get()
@@ -836,13 +865,7 @@ class _OncePerMessage(logging.Filter):
 def run_editor(args):
     platform_utils.attach_parent_console()
     logging.getLogger("led_mon.rendering").addFilter(_OncePerMessage())
-    if platform_utils.IS_WINDOWS:
-        try:
-            # Sharp text on high-DPI screens; must be set before the window is created
-            import ctypes
-            ctypes.windll.shcore.SetProcessDpiAwareness(1)
-        except Exception:
-            pass
+    platform_utils.enable_dpi_awareness()
     root = tk.Tk()
     try:
         from led_mon.tray import make_icon_image
