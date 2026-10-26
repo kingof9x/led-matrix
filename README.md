@@ -54,6 +54,8 @@ On Windows the app runs without a window and shows an icon in the system tray (y
 
 **SmartScreen warning.** The builds are not code-signed yet, so Windows may show *"Windows protected your PC"* the first time. Click *More info* > *Run anyway*.
 
+**Antivirus false alarms.** Some antivirus engines flag unsigned programs packaged with PyInstaller, because malware is often packaged the same way. To reduce this, the release builds compile PyInstaller's launcher from source instead of using the shared prebuilt one, don't compress the exe with UPX, and carry version details. The Windows keyboard shortcuts use registered hotkeys rather than watching every keystroke. If a scanner still flags a build from this repository's Actions, the installer usually gets fewer flags than the portable exe.
+
 **Build it yourself** (Windows, Python 3.12):
 
 ```powershell
@@ -61,6 +63,7 @@ git clone <repository-url>
 cd led-matrix
 py -3.12 -m venv .venv
 .venv\Scripts\activate
+$env:PYINSTALLER_COMPILE_BOOTLOADER = "1"; python -m pip install --no-binary pyinstaller pyinstaller   # optional: own launcher (needs Visual Studio Build Tools)
 python -m pip install -r requirements.txt pyinstaller pytest
 python -m pytest
 python -m led_mon.led_system_monitor --no-tray          # run from source in the console
