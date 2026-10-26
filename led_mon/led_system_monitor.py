@@ -853,7 +853,7 @@ def stop_drawing_queue(draw_queue, blank=False):
 def main(args):
     # A windowless Windows exe has no console; reuse the one it was started from for --help / --list-apps
     platform_utils.attach_parent_console()
-    base_apps = ["cpu", "net", "disk", "mem-bat", "snap"]
+    base_apps = ["cpu", "cpu-graph", "gpu-graph", "net", "disk", "disk-net", "mem-bat", "snap"]
     plugin_apps = []
     ###############################################################
     ###  Load additional app names from plugins for listing insalled apps  ###

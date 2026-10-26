@@ -104,9 +104,49 @@ class NetworkMonitor:
             print(f"Error in NetworkMonitor.get(): {e}")
             return 0, 0
 
+def _linux_core_groups(logical_count):
+    """Logical CPUs grouped by physical core, from sysfs (AMD numbers a core's threads N and N+8, not N and N+1)."""
+    groups = []
+    seen = set()
+    for cpu in range(logical_count):
+        if cpu in seen:
+            continue
+        try:
+            with open(f'/sys/devices/system/cpu/cpu{cpu}/topology/thread_siblings_list') as f:
+                text = f.read().strip()
+        except OSError:
+            return None
+        members = set()
+        for part in text.split(','):
+            if '-' in part:
+                a, b = part.split('-')
+                members.update(range(int(a), int(b) + 1))
+            elif part:
+                members.add(int(part))
+        members = sorted(m for m in members if m < logical_count) or [cpu]
+        seen.update(members)
+        groups.append(members)
+    return groups
+
+
+def cpu_core_groups():
+    """Indexes into psutil.cpu_percent(percpu=True), one list per physical core."""
+    logical = psutil.cpu_count() or 1
+    physical = psutil.cpu_count(logical=False) or logical
+    groups = None
+    if os.name != 'nt':
+        groups = _linux_core_groups(logical)
+    if not groups:
+        # Windows numbers a core's threads next to each other
+        per_core = max(1, logical // physical)
+        groups = [list(range(i, min(i + per_core, logical))) for i in range(0, logical, per_core)]
+    return groups
+
+
 class CPUMonitor:
     def __init__(self, hysterisis_time = 10):
-        self.cpu_count = psutil.cpu_count() // 2 # 2 logical cores per physical core
+        self.core_groups = cpu_core_groups()
+        self.cpu_count = len(self.core_groups)
         self.cpu_usage_history = [[] for _ in range(self.cpu_count)]
         self.history_times = []
         self.max_history_size = hysterisis_time
@@ -114,8 +154,9 @@ class CPUMonitor:
     def get(self):
         try:
             cpu_usage = psutil.cpu_percent(percpu=True)
-            for i in range(self.cpu_count):
-                useage = 2 * max(cpu_usage[2*i], cpu_usage[2*i+1]) # Combine logical cores
+            for i, group in enumerate(self.core_groups):
+                # Combine logical cores
+                useage = len(group) * max(cpu_usage[j] for j in group)
                 if useage > 100:
                     useage = 100
                 self.cpu_usage_history[i].append(useage / 100.0)
@@ -131,6 +172,37 @@ class CPUMonitor:
         except Exception as e:
             print(f"Error in CPUMonitor.get(): {e}")
             return [0] * self.cpu_count
+
+class HistoryMonitor:
+    """Keeps the last few readings of a value (0.0-1.0) for a scrolling graph, newest first.
+
+    read() is called at most once per interval seconds; it may return None when there is no
+    reading (for example no GPU found), which shows as an empty row.
+    """
+    def __init__(self, read, interval = 1.0, size = 16):
+        self.read = read
+        self.interval = interval
+        self.size = size
+        self.samples = []
+        self.last_time = None
+
+    def get(self):
+        now = time.monotonic()
+        if self.last_time is None or now - self.last_time >= self.interval:
+            self.last_time = now
+            try:
+                value = self.read()
+            except Exception as e:
+                print(f"Error in HistoryMonitor.get(): {e}")
+                value = None
+            if value is not None:
+                value = min(1.0, max(0.0, value))
+            self.samples = ([value] + self.samples)[:self.size]
+        return list(self.samples)
+
+def overall_cpu_ratio():
+    # Not per-CPU, so it doesn't disturb the CPU app's own percpu readings
+    return psutil.cpu_percent() / 100.0
 
 class MemoryMonitor:
     @staticmethod

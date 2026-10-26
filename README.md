@@ -51,7 +51,7 @@ Only one copy runs at a time; starting it again does nothing.
 
 **Layout editor.** Instead of editing the config file by hand, open *Edit layout* from the tray menu (or *LED Matrix Layout Editor* in the Start menu, or run `led_mon.exe --edit-layout`).
 
-* The list on the left shows the available apps. Half-panel apps (CPU, memory + battery, disk, network, temperatures, fans) go in the top or bottom half of a panel; whole-panel apps (clock, weather, equalizer, picture) fill it.
+* The list on the left shows the available apps. Half-panel apps (CPU cores, CPU graph, GPU graph, memory + battery, disk, network, disk + network, temperatures, fans) go in the top or bottom half of a panel; whole-panel apps (clock, weather, equalizer, picture) fill it.
 * Each panel shows a list of *pages*, shown in turn for the number of seconds you set. Drag an app onto a panel to put it on the selected page, or select a slot and double-click an app. Click an app on the panel to change its settings on the right.
 * The panel pictures are a live preview, drawn with the same code as the real panels and your computer's current values. The equalizer preview shows made-up bars.
 * *Apply to panels* saves the layout to `%APPDATA%\led_mon\config-local.yaml` (the previous file is kept as `config-local.yaml.bak`) and the running app switches to it straight away.
@@ -97,10 +97,12 @@ $env:LED_MON_ONEFILE = "1"; python -m PyInstaller led_mon.spec --noconfirm --wor
 
 ## Capabilities
 * Display system performance characteristics in real-time
-  * CPU utilization
+  * CPU utilization, per core or as a scrolling graph of overall use
+  * GPU utilization as a scrolling graph (pick the GPU when there are several)
   * Battery charge level and plug status + memory utilization
   * Disk Input/Output rates 
   * Network Upload/Download rates
+  * Disk and network together in one half panel
   * Temperature sensor readings
   * Fan speeds
 * Other apps
@@ -394,6 +396,21 @@ Set arguments (`app -> ags`) for the `weather` app in the desired quadrant
     `id_key_override: [forecast, weather_forecast, weather_current]`
 
     If `forecast` is true, the `Forecast Days` and `Forecast Hours` settings will be shown at the bottom left and right edges of the LED device. The `Forecast Days` value will be indicated by 1 to 5 pixels stacked from the bottom on the left edge. The `Forecast Hours` will be indicated by one to 8 pixels stacked from the bottom on the right edge, each representing the three-hour periods from 0 to 21. A hash mark will be drawn in the adjacent column at the fourth pixel, if lit, for ease of reading.
+
+### CPU and GPU graphs (built-in apps `cpu-graph` and `gpu-graph`):
+Each row of the half panel is one second, newest at the top, and the length of the row is how busy the CPU or GPU was in that second (the last pixel is dimmer for a part-filled row). The CPU graph is the overall use of all cores, as in Task Manager.
+
+On Windows the GPU graph reads the same counters as Task Manager (the busiest engine of the GPU). On Linux it reads `gpu_busy_percent` for AMD GPUs and `nvidia-smi` for NVIDIA GPUs. To pick a GPU when there are several, set `gpu` to its name (the layout editor lists them):
+
+  `gpu: AMD Radeon RX 7700S`
+
+Without `gpu`, the first GPU found is shown (on Windows, usually the one driving the built-in screen).
+
+### Disk + network (built-in app `disk-net`):
+The upper part shows disk read (left bar) and write (right bar), the lower part network upload (left) and download (right), like the `disk` and `net` apps in half the space.
+
+### CPU cores (built-in app `cpu`):
+One spiral per physical core, for up to eight cores. CPUs with more cores (such as the 12-core Ryzen AI 9 HX 370) get a bar per core instead, so every core is shown.
 
 ### Snapshot (built-in app, not a plugin):
 Configure the following arguments in the config file (`app -> args`)
