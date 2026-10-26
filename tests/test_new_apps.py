@@ -12,6 +12,10 @@ from led_mon import gpu
 from led_mon.editor import catalog
 from led_mon.platform_utils import IS_WINDOWS
 
+if IS_WINDOWS:
+    # led_mon.monitors needs it on Windows; the quick CI test job doesn't install it, the build job does
+    pytest.importorskip("wmi")
+
 
 @pytest.fixture
 def drawing(monkeypatch):
@@ -60,6 +64,7 @@ def test_gpu_monitor_never_raises_and_picks_the_named_gpu():
 
 @pytest.mark.skipif(not IS_WINDOWS, reason="DXGI and performance counters are Windows only")
 def test_windows_gpu_reader_runs():
+    pytest.importorskip("win32pdh")
     adapters = gpu._dxgi_adapters()
     assert all(isinstance(name, str) and len(luid) == 2 for name, luid in adapters)
     reader = gpu.WindowsGpuReader()
