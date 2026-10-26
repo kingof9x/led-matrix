@@ -160,6 +160,24 @@ def draw_disk_net(grid, disk_values, net_values, fill_value, y):
     draw_short_bar(grid, net_values[0], fill_value, 1, net_top, net_bottom)
     draw_short_bar(grid, net_values[1], fill_value, 5, net_top, net_bottom)
 
+# The fps app, on the whole panel: the FPS as up to three digits stacked from the top,
+# and below them a graph of the last 8 seconds, newest at the top, each row's length
+# relative to the highest FPS shown. A "?" means FPS can't be measured (see the log).
+def draw_fps(grid, fps, history, available, fill_value):
+    char_map = {**numerals, **symbols}
+    rows = grid.T
+    if not available:
+        rows[13:19, :] = char_map["?"] * fill_value
+        return
+    text = str(min(999, int(round(fps or 0)))).rjust(3)
+    for i, ch in enumerate(text):
+        if ch != " ":
+            rows[1+i*8:8+i*8, :] = char_map[ch] * fill_value
+    top = max([v for v in history if v] + [1.0])
+    for row, v in zip(range(26, 34), history):
+        if v is not None:
+            draw_hbar(grid, v / top, fill_value, row)
+
 warned = set()
 def draw_snapshot(grid, fill_value, **kwargs):
     global warned
@@ -299,6 +317,10 @@ direct_draw_funcs = {
     "bat": {
         "fn": draw_battery,
         "border": draw_1_x_2_vert_grid
+    },
+    "fps": {
+        "fn": draw_fps,
+        "border": lambda *x: None # Whole panel, no border
     },
     "snap": {
         "fn": draw_snapshot,

@@ -73,6 +73,11 @@ APPS = [
         Setting("input-device", "Microphone name", "text", "", help="Optional, part of the device name, for microphone mode"),
     ], fixed={"persistent-draw": True, "dispose-fn": "equalizer_dispose"},
        fixed_args={"external-filter": False, "border": False}),
+    AppInfo("fps", "FPS counter", "Frames per second of a game, with a graph of the last few seconds below. "
+            "Windows only, and needs a one-time setup (see the README); shows ? until then.", FULL, [
+        Setting("process", "App to watch", "text", "",
+                help="Blank: whichever app is in front. Or the program's file name, such as eldenring.exe"),
+    ]),
     AppInfo("snap", "Picture", "A still pattern from the snapshot files.", FULL, [
         Setting("file", "Picture", "snapshot", None),
         Setting("animate", "Scroll", "bool", False, target=APP, help="Scroll the picture up the panel"),

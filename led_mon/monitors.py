@@ -174,13 +174,14 @@ class CPUMonitor:
             return [0] * self.cpu_count
 
 class HistoryMonitor:
-    """Keeps the last few readings of a value (0.0-1.0) for a scrolling graph, newest first.
+    """Keeps the last few readings of a value (0.0-1.0, unless clamp is off) for a scrolling graph, newest first.
 
     read() is called at most once per interval seconds; it may return None when there is no
     reading (for example no GPU found), which shows as an empty row.
     """
-    def __init__(self, read, interval = 1.0, size = 16):
+    def __init__(self, read, interval = 1.0, size = 16, clamp = True):
         self.read = read
+        self.clamp = clamp
         self.interval = interval
         self.size = size
         self.samples = []
@@ -195,7 +196,7 @@ class HistoryMonitor:
             except Exception as e:
                 print(f"Error in HistoryMonitor.get(): {e}")
                 value = None
-            if value is not None:
+            if value is not None and self.clamp:
                 value = min(1.0, max(0.0, value))
             self.samples = ([value] + self.samples)[:self.size]
         return list(self.samples)
