@@ -10,7 +10,7 @@ import logging
 import importlib.util
 
 # Internal Dependencies
-from led_mon import platform_utils, control, app_settings
+from led_mon import platform_utils, control, fps, app_settings
 from led_mon.rendering import make_base_app_functions, render_panel, DEFAULT_FOREGROUND, DEFAULT_BACKGROUND
 from led_mon.monitors import CPUMonitor, MemoryMonitor, BatteryMonitor, DiskMonitor, NetworkMonitor
 from led_mon.equalizer_files.visualize import eq_grid
@@ -55,6 +55,8 @@ class PreviewRenderer:
     """Draws a page of the layout the same way the monitor does, using this computer's live values."""
 
     def __init__(self):
+        # Its own trace session, so the preview doesn't stop the running monitor's FPS capture
+        fps.SESSION_NAME = "led_mon_fps_preview"
         self.app_functions = make_base_app_functions(
             CPUMonitor(), MemoryMonitor(), BatteryMonitor(), DiskMonitor(), NetworkMonitor())
         try:

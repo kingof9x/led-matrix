@@ -24,6 +24,7 @@ from led_mon.shared_state import discover_led_devices
 from led_mon.serial_ports import close_all as close_all_ports
 from led_mon.rendering import make_base_app_functions, build_app_kwargs, render_panel
 from led_mon import control
+from led_mon import fps
 from led_mon import app_settings
 
 # External Dependencies
@@ -787,6 +788,7 @@ def app(args, base_apps, plugin_apps):
         for thread in drawing_threads:
             thread.join(timeout=3)
         close_all_ports()
+        fps.stop_all()
 
     if use_tray(args):
         from led_mon import tray
@@ -844,7 +846,7 @@ def stop_drawing_queue(draw_queue):
 def main(args):
     # A windowless Windows exe has no console; reuse the one it was started from for --help / --list-apps
     platform_utils.attach_parent_console()
-    base_apps = ["cpu", "cpu-graph", "gpu-graph", "net", "disk", "disk-net", "mem-bat", "snap"]
+    base_apps = ["cpu", "cpu-graph", "gpu-graph", "net", "disk", "disk-net", "mem-bat", "fps", "snap"]
     plugin_apps = []
     ###############################################################
     ###  Load additional app names from plugins for listing insalled apps  ###
