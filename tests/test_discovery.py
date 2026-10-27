@@ -66,3 +66,45 @@ def test_overrides_default_to_shared_state(monkeypatch):
 
 def test_no_panels():
     assert discover_led_devices([port("COM1", vid=1, pid=2)], overrides={}) == []
+
+
+def test_location_pin_picks_the_panel_at_that_usb_position():
+    ports = [port("COM4", location="1-3.3:x.0"), port("COM5", location="1-4.2:x.0")]
+    result = discover_led_devices(ports, overrides={}, locations_pinned={"left": "1-4.2", "right": "1-3.3"})
+    assert result == [("1-4.2:x.0", "COM5"), ("1-3.3:x.0", "COM4")]
+
+
+def test_location_pin_one_side_auto_detects_other():
+    ports = [port("COM4", location="1-3.2:x.0"), port("COM5", location="1-3.3:x.0")]
+    result = discover_led_devices(ports, overrides={}, locations_pinned={"left": "1-3.3"})
+    assert [d for _, d in result] == ["COM5", "COM4"]
+
+
+def test_location_pin_not_found_falls_back_to_auto_detection():
+    ports = [port("COM4", location="1-3.2:x.0"), port("COM5", location="1-3.3:x.0")]
+    result = discover_led_devices(ports, overrides={}, locations_pinned={"left": "9-9.9"})
+    assert [d for _, d in result] == ["COM4", "COM5"]
+
+
+def test_location_pin_ignores_ports_that_are_not_led_panels():
+    ports = [port("COM3", location="1-4.2:x.0", vid=0x8087, pid=0x0001), port("COM4", location="1-3.2:x.0")]
+    result = discover_led_devices(ports, overrides={}, locations_pinned={"left": "1-4.2"})
+    assert [d for _, d in result] == ["COM4"]
+
+
+def test_port_pin_wins_over_location_pin():
+    ports = [port("COM4", location="1-3.2:x.0"), port("COM5", location="1-3.3:x.0")]
+    result = discover_led_devices(ports, overrides={"left": "COM4"}, locations_pinned={"left": "1-3.3"})
+    assert [d for _, d in result] == ["COM4", "COM5"]
+
+
+def test_overrides_are_read_from_the_config(monkeypatch):
+    monkeypatch.setattr(shared_state, "port_overrides", {})
+    monkeypatch.setattr(shared_state, "location_overrides", {})
+    shared_state.set_overrides_from_config({"duration": 10, "right-port": "COM7", "left-location": "1-4.2"})
+    assert shared_state.port_overrides == {"right": "COM7"}
+    assert shared_state.location_overrides == {"left": "1-4.2"}
+    ports = [port("COM4", location="1-3.2:x.0"), port("COM5", location="1-4.2:x.0"), port("COM7", location="1-3.3:x.0")]
+    assert [d for _, d in discover_led_devices(ports)] == ["COM5", "COM7"]
+    shared_state.set_overrides_from_config({})
+    assert shared_state.port_overrides == {} and shared_state.location_overrides == {}

@@ -43,7 +43,7 @@ On Windows the app runs without a window and shows an icon in the system tray (y
 * *Stop animation* turns the panels off until you choose *Start animation*; the tray icon turns grey while stopped.
 * *Identify panels*, *Next app* and *Freeze app switching* do the same as the keyboard shortcuts below.
 * *Open Hardware Monitor* and *Open Framework Control* appear when those programs are found, and open them (or bring Open Hardware Monitor forward if it is already running). If Open Hardware Monitor is somewhere unusual, put its path in `settings.json` as `"open_hardware_monitor_path"`.
-* *Open config folder*, *Open log*, *Reload config*, *Start with Windows* (a checkbox) and *Quit*.
+* *Open config folder*, *Open log*, *Reload config*, *Start with Windows* (a checkbox) and *Quit*. *Quit* turns the panels dark before the app exits.
 
 Only one copy runs at a time; starting it again does nothing.
 
@@ -57,14 +57,16 @@ Only one copy runs at a time; starting it again does nothing.
 * *Apply to panels* saves the layout to `%APPDATA%\led_mon\config-local.yaml` (the previous file is kept as `config-local.yaml.bak`) and the running app switches to it straight away.
 * *Send preview* shows the current preview on the panels as a still picture for 30 seconds (or until *Resume monitor*), without saving. When the app isn't running, the editor sends the picture to the panels itself.
 * The *Brightness* slider under the app list changes the panel brightness straight away (no need to Apply), the same as the tray slider.
-* The *Port* boxes pin a panel to a COM port (the `left-port` / `right-port` settings); that takes effect the next time the app starts.
+* *Ready-made layouts* fills both panels in one go. *Classic monitor* is the same as the LEDmatrix monitor tool: CPU cores, memory and battery on the left; disk and network on the right. Press *Apply to panels* to use it.
+* The *Port* boxes pin a panel to one of the connected LED panels, in case they are detected in the wrong order. Each entry shows the COM port and the panel's USB position, for example `COM4 (USB 1-4.2)`. The editor saves the USB position (the `left-location` / `right-location` settings), which stays the same even if Windows gives the panel a different COM number. This takes effect the next time the app starts.
 
 **Where things live**
 
 * Config: `%APPDATA%\led_mon\config.yaml` (copied from the default on first run). The layout editor saves to `config-local.yaml` in the same folder; if you edit that file by hand instead, choose *Reload config* from the tray menu afterwards.
 * API keys for the weather app: `%APPDATA%\led_mon\.env` (see `.env-example`).
 * Log: `%LOCALAPPDATA%\led_mon\led_mon.log` (rotated at 1 MB, 3 old files kept). Set `LOG_LEVEL=debug` in the `.env` file for more detail.
-* If the panels are detected in the wrong order, or not at all, set `left-port: COM4` / `right-port: COM5` in the config. The port numbers are shown in *Device Manager > Ports (COM & LPT)*.
+* If the panels are detected in the wrong order, pick the right one in the layout editor's *Port* boxes, or set `left-location: 1-4.2` / `right-location: 1-3.3` (USB positions) or `left-port: COM4` / `right-port: COM5` in the config. If a pinned panel isn't found, the app picks one automatically.
+* To see what the app finds, run `led_mon.exe --diagnose` from a command prompt. It lists the serial ports (with USB position and USB id), which panel it would use as left and right, and whether it found Open Hardware Monitor and Framework Control. It works while the app is running too.
 * Close other programs that use the panels (such as the LED Matrix GUI, `ledmatrixgui.exe`) before starting the app: on Windows only one program can open a panel's port at a time.
 
 **Temperatures and fans.** Windows has no standard API for these, so the `temp` and `fan` apps use Framework's `framework_tool`. Download `framework_tool.exe` from the [framework-system releases](https://github.com/FrameworkComputer/framework-system/releases) and put it next to `led_mon.exe` (for the installed app: `%LOCALAPPDATA%\Programs\led_mon`) or anywhere on your `PATH`. Check that `framework_tool --thermal` prints temperatures in a terminal. Without it, those apps show empty bars and the log says why.

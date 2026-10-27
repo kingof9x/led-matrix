@@ -201,10 +201,9 @@ def get_config(args):
     config_file = platform_utils.resolve_config_file(args.config_file)
     with open(config_file, 'r') as f:
         config = safe_load(f)
-    # Optional left-port / right-port (e.g. COM4 or /dev/ttyACM0) override panel auto-detection
-    shared_state.port_overrides = {
-        side: config[f'{side}-port'] for side in ('left', 'right') if config.get(f'{side}-port')
-    }
+    # Optional left-port / right-port (e.g. COM4 or /dev/ttyACM0) and left-location / right-location
+    # (USB position, e.g. 1-4.2) override panel auto-detection
+    shared_state.set_overrides_from_config(config)
     return config
 
 def find_led_devices():
@@ -779,11 +778,11 @@ def app(args, base_apps, plugin_apps):
                 render_iteration(args)
 
     def shutdown():
-        """Stop drawing and release both serial ports (tray Quit)."""
+        """Turn the panels dark, stop drawing and release both serial ports (tray Quit)."""
         dispose_active_apps()
         drawing_threads = [left_drawing_thread] + ([right_drawing_thread] if len(locations) == 2 else [])
         for draw_queue in drawing_queues:
-            stop_drawing_queue(draw_queue)
+            stop_drawing_queue(draw_queue, blank=True)
         for thread in drawing_threads:
             thread.join(timeout=3)
         close_all_ports()
@@ -829,7 +828,17 @@ def use_tray(args):
     # Windows runs windowless with a tray icon; --no-tray keeps the console behaviour for debugging
     return IS_WINDOWS and not args.no_tray
 
-def stop_drawing_queue(draw_queue):
+def stop_drawing_queue(draw_queue, blank=False):
+    if blank:
+        # Stop any panel animation and draw a dark frame, so the panels don't keep showing the last frame
+        try:
+            draw_queue.put((np.zeros((9,34), dtype = int), False), timeout=1)
+            draw_queue.put((np.zeros((9,34), dtype = int), None), timeout=1)
+            # Wait for the dark frame to be drawn rather than dropping it to make room below
+            draw_queue.put(None, timeout=2)
+            return
+        except queue.Full:
+            log.warning("Could not turn a panel dark before exiting")
     # The queue is small and may be full, so make room for the exit sentinel
     while True:
         try:
@@ -873,10 +882,16 @@ def main(args):
     mode_group.add_argument("--list-apps", "-la", action="store_true", help="List the installed apps, and exit")
     mode_group.add_argument("--config-file", "-cf", default=None, help="Absolute path to custom config file")
     mode_group.add_argument("--edit-layout", action="store_true", help="Open the layout editor window instead of running the monitor")
+    mode_group.add_argument("--diagnose", action="store_true",
+        help="Print the LED panels, serial ports and helper apps that are found, and exit")
     if IS_WINDOWS:
         mode_group.add_argument("--no-tray", action="store_true", help="Run in the console without a tray icon")
     
     args = parser.parse_args()
+    if args.diagnose:
+        from led_mon import diagnose
+        diagnose.run(args.config_file)
+        return
     if args.edit_layout:
         from led_mon.editor import run_editor
         run_editor(args)
