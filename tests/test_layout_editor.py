@@ -237,7 +237,10 @@ def test_classic_preset_is_a_valid_layout():
 
 def test_port_box_saves_usb_location_when_known():
     pytest.importorskip("tkinter")
-    from led_mon.editor.window import build_port_choices, AUTO_PORT
+    try:
+        from led_mon.editor.window import build_port_choices, AUTO_PORT
+    except ImportError as e:
+        pytest.skip(f"full dependencies not installed: {e}")
     ports = [("COM4", "1-3.2"), ("COM5", None)]
     choices, current = build_port_choices(ports)
     assert current == AUTO_PORT
