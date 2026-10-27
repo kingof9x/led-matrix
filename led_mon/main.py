@@ -1,5 +1,4 @@
 # Built In dependencies
-import os
 import logging
 import sys
 

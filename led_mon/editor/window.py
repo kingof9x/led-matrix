@@ -336,7 +336,7 @@ class SettingsPane(ttk.Frame):
             child.destroy()
         self.variables = []
         if entry is None:
-            self.title.configure(text="No app selected" if where is None else f"Empty slot")
+            self.title.configure(text="No app selected" if where is None else "Empty slot")
             self.description.configure(text="Drag an app from the list on the left onto a panel, "
                                             "or select a slot and double-click an app." if where is None else
                                             f"{where}. Double-click an app on the left, or drag it here.")

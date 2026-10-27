@@ -2,6 +2,98 @@
 
 This software is intended for use on a Framework 16 laptop with LED Matrix Panels installed. It's based on the [LED System Monitor](https://code.karsttech.com/jeremy/FW_LED_System_Monitor.git) project, with extensive modifications and extensions applied.
 
+## About this fork (Windows version)
+
+This is a fork of [MidnightJava/led-matrix](https://github.com/MidnightJava/led-matrix). It is **not a rewrite**: all of the original code is still here and Linux works the same way as before. This fork adds a Windows version and some new features on top:
+
+* Runs on Windows 11, as an installer or a portable `.exe` (no Python needed), with an icon in the system tray.
+* A **layout editor** window for choosing which apps show on each panel, with a live preview.
+* New apps: CPU graph, GPU graph, disk + network in one half panel, and an FPS counter for games (Windows only).
+* The CPU cores app now shows every core on CPUs with more than eight cores.
+* A brightness slider, *Stop animation*, *Start with Windows* and other tray menu items.
+
+The plan is to offer these changes back to the original project in a few small pull requests once they have been tested on real hardware (see the checklist below). The full Windows details are in the [Windows](#windows) section.
+
+![The layout editor on Windows](docs/screenshots/layout-editor-windows.jpg)
+
+*The layout editor on Windows. This screenshot was taken before the newest apps were added, so their names aren't in the list yet.*
+
+![Some of the apps as they look on a panel](docs/screenshots/panel-apps.png)
+
+*Some of the apps, drawn by the app's own preview code (the same pictures you see in the layout editor). Half-panel apps use the top or bottom half; the clock and equalizer fill the whole panel.*
+
+### Install on Windows
+
+1. Download [`led_mon-setup.exe`](https://github.com/kingof9x/led-matrix/releases/latest/download/led_mon-setup.exe) (the installer) or [`led_mon.exe`](https://github.com/kingof9x/led-matrix/releases/latest/download/led_mon.exe) (portable, nothing is installed). Older versions are on the [Releases](https://github.com/kingof9x/led-matrix/releases) page.
+2. Close other programs that use the LED panels, such as the LED Matrix Control app (`ledmatrixgui.exe`). Only one program at a time can talk to a panel on Windows.
+3. Run the file. If Windows shows *"Windows protected your PC"*, click *More info* > *Run anyway* (the builds aren't code-signed yet).
+4. The installer adds a Start menu shortcut and starts the app every time you log in. The portable exe only runs when you open it.
+
+On Linux, install the same way as the original project: see [Quick Start](#quick-start-install-the-app-and-run-it-as-a-service).
+
+### How to use it (Windows)
+
+1. After starting, the panels show the default layout and an LED icon appears in the system tray (click `^` near the clock if you can't see it).
+2. Right-click the tray icon and choose **Edit layout** to change what's shown. Drag an app from the list onto a panel. Each panel can have several *pages* that take turns. Click **Apply to panels** to save.
+3. If you don't want to build a layout yourself, use **Ready-made layouts > Classic monitor**: CPU cores and memory + battery on the left panel, disk and network on the right.
+4. Choose **Brightness** in the tray menu to set the brightness yourself, or leave *Follow screen brightness* ticked.
+5. **Stop animation** turns the panels off until you choose *Start animation*. **Quit** turns them dark and closes the app.
+6. Keyboard shortcuts: `Ctrl`+`Alt`+`Shift`+`I` shows the app names, `N` shows the next app, `F` freezes app switching and `U` unfreezes it.
+7. Something not working? Choose **Open log** in the tray menu, or run `led_mon.exe --diagnose` in a command prompt to see which panels the app finds.
+
+### Testing checklist
+
+These features pass the automated tests but have not been tried on a real Framework 16 yet. Tick them off (edit this file, or note them in an issue) as they are confirmed.
+
+**Install and start**
+- [ ] The installer installs without an admin prompt and the app starts afterwards
+- [ ] The portable `led_mon.exe` starts and both panels light up
+- [ ] The app starts by itself after logging in (installer), and *Start with Windows* in the tray turns that on and off
+- [ ] Installing a newer version over an old one keeps the *Start with Windows* choice and the layout
+- [ ] Uninstalling from *Settings > Apps* removes the app and the startup entry
+- [ ] Starting a second copy does nothing (only one copy runs)
+
+**Panels**
+- [ ] The left and right panels are detected the right way round; if not, the editor's *Port* boxes fix it
+- [ ] Unplugging and plugging back a panel: the app picks it up again
+- [ ] `led_mon.exe --diagnose` lists both panels with their USB position
+
+**Tray menu**
+- [ ] Left-click and right-click both open the menu
+- [ ] *Brightness* slider changes the brightness straight away; *Follow screen brightness* follows the laptop screen again
+- [ ] *Stop animation* turns the panels off and the icon grey; *Start animation* brings them back
+- [ ] *Identify panels*, *Next app* and *Freeze app switching* work
+- [ ] *Open Hardware Monitor* opens it, or brings it to the front if it's already open
+- [ ] *Open Framework Control* opens it
+- [ ] *Open config folder*, *Open log* and *Reload config* work
+- [ ] *Quit* turns the panels dark before the app closes
+
+**Keyboard shortcuts**
+- [ ] `Ctrl`+`Alt`+`Shift`+`I` / `N` / `F` / `U` work, and `Alt`+`F` still opens the File menu in other programs
+
+**Layout editor**
+- [ ] Opens from the tray, the Start menu and `led_mon.exe --edit-layout`
+- [ ] Dragging apps onto panels, adding/removing/reordering pages and changing settings all work
+- [ ] *Apply to panels* saves and the running app switches to the new layout
+- [ ] *Send preview* shows the picture on the panels for 30 seconds; *Resume monitor* goes back
+- [ ] *Ready-made layouts > Classic monitor* fills in both panels
+- [ ] *Port* boxes show entries like `COM4 (USB 1-4.2)` and the choice still works after a restart
+
+**Apps**
+- [ ] CPU cores shows every core (one bar per core on CPUs with more than eight cores)
+- [ ] CPU graph and GPU graph move with the load; the GPU setting picks the right graphics card
+- [ ] Disk, network and disk + network react to copying files and downloading
+- [ ] Memory + battery shows the battery level and the charging animation when plugged in
+- [ ] Temperatures and fans show values with `framework_tool.exe` next to `led_mon.exe`
+- [ ] Clock shows the right time; weather shows the weather (needs an API key in `.env`)
+- [ ] Equalizer moves with music, and follows a switch between speakers and headphones
+- [ ] FPS counter shows a game's frame rate after the one-time *Performance Log Users* setup, and `?` before it
+
+**Linux (to make sure nothing broke for existing users)**
+- [ ] `build_and_install.sh` still installs and starts the service
+- [ ] The default layout, the `Alt` keyboard shortcuts and the equalizer still work
+- [ ] The new apps (CPU graph, GPU graph, disk + network) work on Linux too
+
 ## Compatibility
 
 **Hardware:** Framework 16 laptops with LED Matrix Panels  
@@ -27,16 +119,16 @@ The `build_and_install.sh` script will automatically detect your Linux distribut
 
 ## Windows
 
-Download the latest release (neither needs Python):
+Download the latest release from this repository's [Releases](../../releases) page (neither file needs Python):
 
 | File | What it is |
 |------|------------|
-| [`led_mon-setup.exe`](https://github.com/kingof9x/led-matrix/releases/latest/download/led_mon-setup.exe) | Installer. |
-| [`led_mon.exe`](https://github.com/kingof9x/led-matrix/releases/latest/download/led_mon.exe) | Portable app. Double-click to run, nothing is installed. |
+| `led_mon-setup.exe` | Installer. |
+| `led_mon.exe` | Portable app. Double-click to run, nothing is installed. |
 
-Release notes and older versions are on the [Releases](https://github.com/kingof9x/led-matrix/releases) page. Every push also builds both files as artifacts of the *Windows build* GitHub Actions workflow.
+Every push also builds both files as artifacts of the *Windows build* GitHub Actions workflow.
 
-**Making a release:** in GitHub go to *Actions > Windows build > Run workflow*, type a version such as `1.0.0`, and run it. When it finishes, the release `v1.0.0` appears on the Releases page with both files attached, and the download links above point to it. Pushing a tag such as `v1.0.0` does the same. Leaving the version empty makes a test build without a release.
+**Making a release:** in GitHub go to *Actions > Windows build > Run workflow*, type a version such as `1.0.0`, and run it. When it finishes, the release `v1.0.0` appears on the Releases page with both files attached. Pushing a tag such as `v1.0.0` does the same. Leaving the version empty makes a test build without a release.
 
 The installer installs for the current user only (no admin prompt) into `%LOCALAPPDATA%\Programs\led_mon`, adds a Start menu shortcut, and makes the app **start automatically when you log in**. That's the only difference from the portable exe. You can turn auto-start on or off with *Start with Windows* in the tray menu (this works for the portable exe too), or in *Task Manager > Startup apps* (entry `led_mon`). Updating with a newer installer keeps your choice. Uninstall from *Settings > Apps*; this removes the app and the startup entry but keeps your config.
 
