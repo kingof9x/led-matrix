@@ -77,3 +77,36 @@ def test_close_all_releases_ports():
     serial_ports.open_port("COM5")
     serial_ports.close_all()
     assert FakeSerial.open_ports == set()
+
+
+def test_quit_draws_a_dark_frame_before_stopping():
+    pytest.importorskip("numpy")
+    pytest.importorskip("psutil")
+    try:
+        from led_mon import led_system_monitor as monitor
+    except Exception as e:
+        pytest.skip(f"full dependencies not installed: {e}")
+    import queue
+    import threading
+    import numpy as np
+
+    draw_queue = queue.Queue(2)
+    draw_queue.put((np.ones((9, 34), dtype=int), None))  # a frame still waiting to be drawn
+    received = []
+
+    def drawing_thread():
+        while True:
+            item = draw_queue.get()
+            received.append(item)
+            if item is None:
+                return
+
+    t = threading.Thread(target=drawing_thread)
+    t.start()
+    monitor.stop_drawing_queue(draw_queue, blank=True)
+    t.join(timeout=5)
+    assert received[-1] is None
+    grid, animate = received[-3]
+    assert animate is False and not grid.any()
+    grid, animate = received[-2]
+    assert animate is None and not grid.any()

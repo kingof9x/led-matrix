@@ -219,3 +219,45 @@ def test_monitor_shows_preview_and_reloads(monkeypatch, tmp_path):
         monitor.shutdown_event.set()
         thread.join(timeout=5)
         monitor.shutdown_event.clear()
+
+
+def test_classic_preset_is_a_valid_layout():
+    layout = Layout(pages=L.preset_pages("Classic monitor"), settings={"duration": 10, "left-port": "COM4"})
+    assert L.validate(layout) == []
+    config = L.to_config(layout)
+    assert [a["name"] for a in config["quadrants"]["top-left"]] == ["cpu"]
+    assert [a["name"] for a in config["quadrants"]["bottom-left"]] == ["mem-bat"]
+    assert [a["name"] for a in config["quadrants"]["top-right"]] == ["disk"]
+    assert [a["name"] for a in config["quadrants"]["bottom-right"]] == ["net"]
+    assert config["left-port"] == "COM4"
+    again, warnings = L.from_config(config)
+    assert warnings == []
+    assert again.pages["left"][0].top["name"] == "cpu"
+
+
+def test_port_box_saves_usb_location_when_known():
+    pytest.importorskip("tkinter")
+    try:
+        from led_mon.editor.window import build_port_choices, AUTO_PORT
+    except ImportError as e:
+        pytest.skip(f"full dependencies not installed: {e}")
+    ports = [("COM4", "1-3.2"), ("COM5", None)]
+    choices, current = build_port_choices(ports)
+    assert current == AUTO_PORT
+    assert choices["COM4 (USB 1-3.2)"] == ("COM4", "1-3.2")
+    assert choices["COM5"] == ("COM5", None)
+
+    # A saved location shows as the panel now at that position
+    choices, current = build_port_choices([("COM6", "1-3.2")], location_setting="1-3.2")
+    assert current == "COM6 (USB 1-3.2)"
+
+    # A saved location with no panel there is still shown, and kept if chosen again
+    choices, current = build_port_choices([], location_setting="1-4.2")
+    assert choices[current] == (None, "1-4.2")
+
+    # An existing port pin is kept as a port pin
+    choices, current = build_port_choices(ports, port_setting="com4")
+    assert current == "COM4 (USB 1-3.2)"
+    assert choices[current] == ("COM4", None)
+    choices, current = build_port_choices([], port_setting="COM9")
+    assert choices[current] == ("COM9", None)

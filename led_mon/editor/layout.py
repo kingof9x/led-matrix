@@ -46,6 +46,20 @@ class Layout:
     settings: dict = field(default_factory=lambda: {"duration": 10})
 
 
+# Ready-made layouts: {name: {side: [(top app, bottom app), ...]}}, one page per pair
+PRESETS = {
+    # The same as the LEDmatrix monitor tool: CPU cores, memory and battery on the left; disk and network on the right
+    "Classic monitor": {"left": [("cpu", "mem-bat")], "right": [("disk", "net")]},
+}
+
+
+def preset_pages(name, duration=DEFAULT_DURATION):
+    """The pages of a ready-made layout, for both panels."""
+    return {side: [Page(duration=duration, top=catalog.new_app(top, side), bottom=catalog.new_app(bottom, side))
+                   for top, bottom in PRESETS[name][side]]
+            for side in SIDES}
+
+
 def _displays(app):
     return app is not None and app.get("display", True) is not False
 

@@ -30,6 +30,8 @@ hiddenimports = [
     'led_mon.editor.layout', 'led_mon.editor.catalog', 'led_mon.hotkeys', 'led_mon.gpu', 'tkinter', 'tkinter.ttk', 'tkinter.messagebox',
     # Imported when the tray starts
     'led_mon.tray', 'led_mon.brightness_popup', 'led_mon.app_settings', 'led_mon.external_apps', 'led_mon.startup',
+    # Imported only with --diagnose
+    'led_mon.diagnose',
 ]
 
 icon = None
