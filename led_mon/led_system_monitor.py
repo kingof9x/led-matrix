@@ -17,7 +17,7 @@ from led_mon import platform_utils
 from led_mon.platform_utils import IS_WINDOWS, IS_LINUX
 # Load API keys before the plugins are imported (via drawing) and read them
 platform_utils.load_env_file()
-from led_mon.drawing import draw_outline_border, draw_ids, draw_id, draw_app, draw_app_border, DrawingThread
+from led_mon.drawing import draw_outline_border, draw_ids, draw_id, DrawingThread
 from led_mon.monitors import CPUMonitor, MemoryMonitor, BatteryMonitor, DiskMonitor, NetworkMonitor, get_monitor_brightness
 from led_mon import shared_state
 from led_mon.shared_state import discover_led_devices
