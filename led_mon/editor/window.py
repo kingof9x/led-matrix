@@ -39,12 +39,41 @@ def led_color(value):
 
 
 def led_ports():
+    """[(port, USB location or None), ...] of the connected LED panels."""
     from serial.tools import list_ports
     from led_mon.shared_state import is_led_matrix_port
     try:
-        return [p.device for p in list_ports.comports() if is_led_matrix_port(p)]
+        # The location's interface part (":1.0") is dropped; the rest stays the same when COM numbers change
+        return [(p.device, p.location.split(":")[0] if p.location else None)
+                for p in list_ports.comports() if is_led_matrix_port(p)]
     except Exception:
         return []
+
+
+def build_port_choices(ports, port_setting=None, location_setting=None):
+    """The Port box's entries for one panel, as {label: (port, location)}, and the label to show now.
+
+    Picking a panel whose USB location is known saves the location (left-location / right-location),
+    which stays the same when Windows renumbers the COM ports; otherwise the port name is saved.
+    """
+    choices = {AUTO_PORT: (None, None)}
+    current = AUTO_PORT
+    for port, location in ports:
+        label = f"{port} (USB {location})" if location else port
+        choices[label] = (port, location)
+        if location_setting and location and location.startswith(location_setting) and not port_setting:
+            current = label
+        elif port_setting and port.lower() == str(port_setting).lower():
+            current = label
+            # Keep what the config says (the port), so choosing it again changes nothing
+            choices[label] = (port, None)
+    if current == AUTO_PORT and port_setting:
+        current = str(port_setting)
+        choices[current] = (current, None)
+    elif current == AUTO_PORT and location_setting:
+        current = f"USB {location_setting} (not connected)"
+        choices[current] = (None, location_setting)
+    return choices, current
 
 
 class PanelView(ttk.Frame):
@@ -62,7 +91,7 @@ class PanelView(ttk.Frame):
         header.pack(fill="x")
         ttk.Label(header, text=f"{side.capitalize()} panel", font=("Segoe UI", 11, "bold")).pack(side="left")
         self.port_var = tk.StringVar(value=AUTO_PORT)
-        self.port_box = ttk.Combobox(header, textvariable=self.port_var, width=12, state="readonly")
+        self.port_box = ttk.Combobox(header, textvariable=self.port_var, width=20, state="readonly")
         self.port_box.pack(side="right")
         ttk.Label(header, text="Port").pack(side="right", padx=(0, 4))
         self.port_box.bind("<<ComboboxSelected>>", lambda e: editor.on_port_changed(side, self.port_var.get()))
@@ -536,6 +565,12 @@ class LayoutEditor:
         self.apply_button = ttk.Button(bar, text="Apply to panels", command=self.apply)
         self.apply_button.pack(side="right")
         ttk.Button(bar, text="Revert", command=self.revert).pack(side="right", padx=4)
+        presets = ttk.Menubutton(bar, text="Ready-made layouts")
+        presets_menu = tk.Menu(presets, tearoff=False)
+        for name in layout_mod.PRESETS:
+            presets_menu.add_command(label=name, command=lambda name=name: self.use_preset(name))
+        presets["menu"] = presets_menu
+        presets.pack(side="right", padx=4)
         self.start_button = ttk.Button(bar, text="Start monitor", command=self.start_monitor)
 
         self.fill_app_list()
@@ -549,11 +584,13 @@ class LayoutEditor:
 
     def fill_ports(self):
         ports = led_ports()
+        self.port_choices = {}
         for side, view in self.panels.items():
-            current = self.layout.settings.get(f"{side}-port")
-            values = [AUTO_PORT] + ports + ([current] if current and current not in ports else [])
-            view.port_box.configure(values=values)
-            view.port_var.set(current or AUTO_PORT)
+            choices, current = build_port_choices(ports, self.layout.settings.get(f"{side}-port"),
+                                            self.layout.settings.get(f"{side}-location"))
+            self.port_choices[side] = choices
+            view.port_box.configure(values=list(choices))
+            view.port_var.set(current)
 
     def refresh_all(self):
         for view in self.panels.values():
@@ -599,11 +636,13 @@ class LayoutEditor:
         self.update_title()
 
     def on_port_changed(self, side, value):
-        key = f"{side}-port"
-        if value == AUTO_PORT:
-            self.layout.settings.pop(key, None)
-        else:
-            self.layout.settings[key] = value
+        port, location = self.port_choices.get(side, {}).get(value, (None, None))
+        self.layout.settings.pop(f"{side}-port", None)
+        self.layout.settings.pop(f"{side}-location", None)
+        if location:
+            self.layout.settings[f"{side}-location"] = location
+        elif port:
+            self.layout.settings[f"{side}-port"] = port
         self.changed(refresh_settings=False)
         self.set_status("Port changes take effect the next time the monitor starts.")
 
@@ -842,6 +881,17 @@ class LayoutEditor:
             self.root.after(3000, self.check_monitor)
         except Exception as e:
             self.set_status(f"Could not start the monitor: {e}")
+
+    def use_preset(self, name):
+        if not messagebox.askyesno("Ready-made layout", f"Replace both panels' pages with the {name} layout?\n\n"
+                                   "Nothing is saved until you press Apply to panels.", parent=self.root):
+            return
+        self.layout.pages = layout_mod.preset_pages(name)
+        for view in self.panels.values():
+            view.selected_page = 0
+        self.selection = None
+        self.changed()
+        self.set_status(f"Using the {name} layout. Press Apply to panels to show it.")
 
     def revert(self):
         if self.dirty and not messagebox.askyesno("Revert", "Discard your changes and reload the saved layout?",
