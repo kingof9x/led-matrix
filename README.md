@@ -619,3 +619,16 @@ If you use the EasyEffects external filter, add an input effects preset with 9 b
 * The baseline reference for calculating the ratio used to display temperature and fan speed readings were arbitarily defined. See `TEMP_REF` and `MAX_FAN_SPEED` in `temp_fan_plugin.py`.  
 * To examine system performance measures manually and in detail, run `python ps-util-sensors.py`
 * To use a different key combination for identifying the running apps, see `KEY_I` and `MODIFIER_KEYS` in `led_system_monitor.py`
+
+## Project status
+
+**Status:** Waiting on Callum  
+**Waiting on:** Callum: finish testing, then submit upstream  
+**Notes:** Windows port of the led_mon system monitor. Goal: send the changes upstream.  
+**Last updated:** 2026-10-28
+
+### Task list
+
+- [ ] Prepare and format the upstream pull request (Claude can help) (blocked)
+- [ ] Submit the pull request to MidnightJava/led-matrix (blocked)
+
