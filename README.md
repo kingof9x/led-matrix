@@ -622,10 +622,10 @@ If you use the EasyEffects external filter, add an input effects preset with 9 b
 
 ## Project status
 
-**Status:** Waiting on Callum  
-**Waiting on:** Callum: finish testing, then submit upstream  
+**Status:** Waiting on developer  
+**Waiting on:** Developer: finish testing, then submit upstream  
 **Notes:** Windows port of the led_mon system monitor. Goal: send the changes upstream.  
-**Last updated:** 2026-10-28
+**Last updated:** 2026-11-02
 
 ### Task list
 
