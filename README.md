@@ -1,138 +1,46 @@
-# Framework 16 LED Matrix System Monitoring Application
+# LED Matrix Monitor for Windows (Framework 16)
 
-This software is intended for use on a Framework 16 laptop with LED Matrix Panels installed. It's based on the [LED System Monitor](https://code.karsttech.com/jeremy/FW_LED_System_Monitor.git) project, with extensive modifications and extensions applied.
+A Windows port of [MidnightJava/led-matrix](https://github.com/MidnightJava/led-matrix), the LED matrix system monitor for the Framework Laptop 16 (itself based on [LED System Monitor](https://code.karsttech.com/jeremy/FW_LED_System_Monitor.git)). It shows CPU, memory, battery, disk, network, temperatures, fans, the time, the weather and more on the two LED Matrix input modules.
 
-## About this fork (Windows version)
+This version runs on **Windows 11 only**. For Linux, use the [original project](https://github.com/MidnightJava/led-matrix).
 
-This is a fork of [MidnightJava/led-matrix](https://github.com/MidnightJava/led-matrix). It is **not a rewrite**: all of the original code is still here and Linux works the same way as before. This fork adds a Windows version and some new features on top:
+What this port adds:
 
-* Runs on Windows 11, as an installer or a portable `.exe` (no Python needed), with an icon in the system tray.
+* An installer and a portable `.exe` (no Python needed), with an icon in the system tray.
 * A **layout editor** window for choosing which apps show on each panel, with a live preview.
-* New apps: CPU graph, GPU graph, disk + network in one half panel, and an FPS counter for games (Windows only).
-* The CPU cores app now shows every core on CPUs with more than eight cores.
+* Temperatures and fans read from **Framework Control**, **Libre Hardware Monitor** or `framework_tool`, with a choice of sensors and Celsius or Fahrenheit.
+* New apps: CPU graph, GPU graph, disk + network in one half panel, and an FPS counter for games.
+* Every core shown on CPUs with more than eight cores.
 * A brightness slider, *Stop animation*, *Start with Windows* and other tray menu items.
 
-The plan is to offer these changes back to the original project in a few small pull requests once they have been tested on real hardware (see the checklist below). The full Windows details are in the [Windows](#windows) section.
+![The layout editor](docs/screenshots/layout-editor-windows.jpg)
 
-![The layout editor on Windows](docs/screenshots/layout-editor-windows.jpg)
-
-*The layout editor on Windows. This screenshot was taken before the newest apps were added, so their names aren't in the list yet.*
+*The layout editor. This screenshot was taken before the newest apps were added, so their names aren't in the list yet.*
 
 ![Some of the apps as they look on a panel](docs/screenshots/panel-apps.png)
 
 *Some of the apps, drawn by the app's own preview code (the same pictures you see in the layout editor). Half-panel apps use the top or bottom half; the clock and equalizer fill the whole panel.*
 
-### Install on Windows
+## Download and install
 
 1. Download [`led_mon-setup.exe`](https://github.com/kingof9x/led-matrix/releases/latest/download/led_mon-setup.exe) (the installer) or [`led_mon.exe`](https://github.com/kingof9x/led-matrix/releases/latest/download/led_mon.exe) (portable, nothing is installed). Older versions are on the [Releases](https://github.com/kingof9x/led-matrix/releases) page.
-2. Close other programs that use the LED panels, such as the LED Matrix Control app (`ledmatrixgui.exe`). Only one program at a time can talk to a panel on Windows.
+2. Close other programs that use the LED panels, such as the LED Matrix Control app (`ledmatrixgui.exe`). Only one program at a time can talk to a panel.
 3. Run the file. If Windows shows *"Windows protected your PC"*, click *More info* > *Run anyway* (the builds aren't code-signed yet).
-4. The installer adds a Start menu shortcut and starts the app every time you log in. The portable exe only runs when you open it.
 
-On Linux, install the same way as the original project: see [Quick Start](#quick-start-install-the-app-and-run-it-as-a-service).
+The installer installs for the current user only (no admin prompt) into `%LOCALAPPDATA%\Programs\led_mon`, adds a Start menu shortcut, and makes the app **start automatically when you log in**. That's the only difference from the portable exe. You can turn auto-start on or off with *Start with Windows* in the tray menu (this works for the portable exe too), or in *Task Manager > Startup apps* (entry `led_mon`). Updating with a newer installer keeps your choice. Uninstall from *Settings > Apps*; this removes the app and the startup entry but keeps your config.
 
-### How to use it (Windows)
+## How to use it
 
 1. After starting, the panels show the default layout and an LED icon appears in the system tray (click `^` near the clock if you can't see it).
 2. Right-click the tray icon and choose **Edit layout** to change what's shown. Drag an app from the list onto a panel. Each panel can have several *pages* that take turns. Click **Apply to panels** to save.
 3. If you don't want to build a layout yourself, use **Ready-made layouts > Classic monitor**: CPU cores and memory + battery on the left panel, disk and network on the right.
 4. Choose **Brightness** in the tray menu to set the brightness yourself, or leave *Follow screen brightness* ticked.
 5. **Stop animation** turns the panels off until you choose *Start animation*. **Quit** turns them dark and closes the app.
-6. Keyboard shortcuts: `Ctrl`+`Alt`+`Shift`+`I` shows the app names, `N` shows the next app, `F` freezes app switching and `U` unfreezes it.
-7. Something not working? Choose **Open log** in the tray menu, or run `led_mon.exe --diagnose` in a command prompt to see which panels the app finds.
+6. Something not working? Choose **Open log** in the tray menu, or run `led_mon.exe --diagnose` in a command prompt to see which panels the app finds.
 
-### Testing checklist
+### Tray menu
 
-These features pass the automated tests but have not been tried on a real Framework 16 yet. Tick them off (edit this file, or note them in an issue) as they are confirmed.
-
-**Install and start**
-- [ ] The installer installs without an admin prompt and the app starts afterwards
-- [ ] The portable `led_mon.exe` starts and both panels light up
-- [ ] The app starts by itself after logging in (installer), and *Start with Windows* in the tray turns that on and off
-- [ ] Installing a newer version over an old one keeps the *Start with Windows* choice and the layout
-- [ ] Uninstalling from *Settings > Apps* removes the app and the startup entry
-- [ ] Starting a second copy does nothing (only one copy runs)
-
-**Panels**
-- [ ] The left and right panels are detected the right way round; if not, the editor's *Port* boxes fix it
-- [ ] Unplugging and plugging back a panel: the app picks it up again
-- [ ] `led_mon.exe --diagnose` lists both panels with their USB position
-
-**Tray menu**
-- [ ] Left-click and right-click both open the menu
-- [ ] *Brightness* slider changes the brightness straight away; *Follow screen brightness* follows the laptop screen again
-- [ ] *Stop animation* turns the panels off and the icon grey; *Start animation* brings them back
-- [ ] *Identify panels*, *Next app* and *Freeze app switching* work
-- [ ] *Open Hardware Monitor* opens it, or brings it to the front if it's already open
-- [ ] *Open Framework Control* opens it
-- [ ] *Open config folder*, *Open log* and *Reload config* work
-- [ ] *Quit* turns the panels dark before the app closes
-
-**Keyboard shortcuts**
-- [ ] `Ctrl`+`Alt`+`Shift`+`I` / `N` / `F` / `U` work, and `Alt`+`F` still opens the File menu in other programs
-
-**Layout editor**
-- [ ] Opens from the tray, the Start menu and `led_mon.exe --edit-layout`
-- [ ] Dragging apps onto panels, adding/removing/reordering pages and changing settings all work
-- [ ] *Apply to panels* saves and the running app switches to the new layout
-- [ ] *Send preview* shows the picture on the panels for 30 seconds; *Resume monitor* goes back
-- [ ] *Ready-made layouts > Classic monitor* fills in both panels
-- [ ] *Port* boxes show entries like `COM4 (USB 1-4.2)` and the choice still works after a restart
-
-**Apps**
-- [ ] CPU cores shows every core (one bar per core on CPUs with more than eight cores)
-- [ ] CPU graph and GPU graph move with the load; the GPU setting picks the right graphics card
-- [ ] Disk, network and disk + network react to copying files and downloading
-- [ ] Memory + battery shows the battery level and the charging animation when plugged in
-- [ ] Temperatures and fans show values with `framework_tool.exe` next to `led_mon.exe`
-- [ ] Clock shows the right time; weather shows the weather (needs an API key in `.env`)
-- [ ] Equalizer moves with music, and follows a switch between speakers and headphones
-- [ ] FPS counter shows a game's frame rate after the one-time *Performance Log Users* setup, and `?` before it
-
-**Linux (to make sure nothing broke for existing users)**
-- [ ] `build_and_install.sh` still installs and starts the service
-- [ ] The default layout, the `Alt` keyboard shortcuts and the equalizer still work
-- [ ] The new apps (CPU graph, GPU graph, disk + network) work on Linux too
-
-## Compatibility
-
-**Hardware:** Framework 16 laptops with LED Matrix Panels  
-**Operating Systems:** Linux distributions (Ubuntu, Fedora, NixOS, Debian, CentOS, RHEL, and others) and Windows 11 (see [Windows](#windows))  
-**Dependencies:** Python 3.7+ with numerous PyPi depednenceies (see requirements.txt)
-
-## Quick Start (install the app and run it as a service)
-
-For most users, the fastest way to get started. This installs dependencies, builds the app, installs it as a service, and starts the service:
-
-```bash
-# Clone the repository
-git clone <repository-url>
-cd led-matrix
-
-# Run with automatic dependency installation
-chmod +x build_and_install.sh
-./build_and_install.sh
-./dist/led_mon/led_mon #optionally run manually
-```
-
-The `build_and_install.sh` script will automatically detect your Linux distribution, install the required dependencies, build an executable file of the python application, and install it as a user-level systemd service fwledmonitor.service.
-
-## Windows
-
-Download the latest release from this repository's [Releases](../../releases) page (neither file needs Python):
-
-| File | What it is |
-|------|------------|
-| `led_mon-setup.exe` | Installer. |
-| `led_mon.exe` | Portable app. Double-click to run, nothing is installed. |
-
-Every push also builds both files as artifacts of the *Windows build* GitHub Actions workflow.
-
-**Making a release:** in GitHub go to *Actions > Windows build > Run workflow*, type a version such as `1.0.0`, and run it. When it finishes, the release `v1.0.0` appears on the Releases page with both files attached. Pushing a tag such as `v1.0.0` does the same. Leaving the version empty makes a test build without a release.
-
-The installer installs for the current user only (no admin prompt) into `%LOCALAPPDATA%\Programs\led_mon`, adds a Start menu shortcut, and makes the app **start automatically when you log in**. That's the only difference from the portable exe. You can turn auto-start on or off with *Start with Windows* in the tray menu (this works for the portable exe too), or in *Task Manager > Startup apps* (entry `led_mon`). Updating with a newer installer keeps your choice. Uninstall from *Settings > Apps*; this removes the app and the startup entry but keeps your config.
-
-On Windows the app runs without a window and shows an icon in the system tray (you may need to open the `^` overflow area). Left- or right-click the icon to open the tray menu:
+The app runs without a window and shows an icon in the system tray (you may need to open the `^` overflow area). Left- or right-click the icon to open the tray menu:
 
 * *Edit layout* opens the layout editor (below).
 * *Brightness* pops up a small slider next to the tray. Moving it sets the panel brightness yourself; tick *Follow screen brightness* to go back to following the screen (the default). Click anywhere else or press `Esc` to close it. The choice is kept in `%APPDATA%\led_mon\settings.json`.
@@ -143,9 +51,20 @@ On Windows the app runs without a window and shows an icon in the system tray (y
 
 Only one copy runs at a time; starting it again does nothing.
 
-**Keyboard shortcuts on Windows** are `Ctrl` + `Alt` + `Shift` with the same letters as on Linux: `I` shows the app names for a few seconds, `N` shows the next app, `F` freezes app switching and `U` unfreezes it. They use the Windows hotkey feature, so the app only hears about these four shortcuts and never sees other keystrokes (`--no-key-listener` turns them off). The extra modifiers keep them from taking `Alt` + `F` and the like away from other programs.
+### Keyboard shortcuts
 
-**Layout editor.** Instead of editing the config file by hand, open *Edit layout* from the tray menu (or *LED Matrix Layout Editor* in the Start menu, or run `led_mon.exe --edit-layout`).
+`Ctrl` + `Alt` + `Shift` with:
+
+* `I`: show the app names in each quadrant for a few seconds
+* `N`: show the next app without waiting for the time slice to end
+* `F`: freeze app switching, so the current app stays on
+* `U`: unfreeze app switching
+
+They use the Windows hotkey feature, so the app only hears about these four shortcuts and never sees other keystrokes (`--no-key-listener` turns them off). The extra modifiers keep them from taking `Alt` + `F` and the like away from other programs.
+
+### Layout editor
+
+Instead of editing the config file by hand, open *Edit layout* from the tray menu (or *LED Matrix Layout Editor* in the Start menu, or run `led_mon.exe --edit-layout`).
 
 * The list on the left shows the available apps. Half-panel apps (CPU cores, CPU graph, GPU graph, memory + battery, disk, network, disk + network, temperatures, fans) go in the top or bottom half of a panel; whole-panel apps (clock, weather, equalizer, FPS counter, picture) fill it.
 * Each panel shows a list of *pages*, shown in turn for the number of seconds you set. Drag an app onto a panel to put it on the selected page, or select a slot and double-click an app. Click an app on the panel to change its settings on the right.
@@ -156,297 +75,36 @@ Only one copy runs at a time; starting it again does nothing.
 * *Ready-made layouts* fills both panels in one go. *Classic monitor* is the same as the LEDmatrix monitor tool: CPU cores, memory and battery on the left; disk and network on the right. Press *Apply to panels* to use it.
 * The *Port* boxes pin a panel to one of the connected LED panels, in case they are detected in the wrong order. Each entry shows the COM port and the panel's USB position, for example `COM4 (USB 1-4.2)`. The editor saves the USB position (the `left-location` / `right-location` settings), which stays the same even if Windows gives the panel a different COM number. This takes effect the next time the app starts.
 
+### Temperatures and fans
+
+Windows has no standard way to read the laptop's temperatures and fans, so the Temperatures and Fans apps read them from one of these. Click the Temperatures or Fans app on a panel in the layout editor and choose under **Read from**:
+
+* **Automatic** (the default): tries Framework Control, then Libre Hardware Monitor, then `framework_tool`, and uses the first one that gives readings.
+* **Framework Control**: needs [Framework Control](https://github.com/ozturkkl/framework-control) installed. Its service runs in the background, so nothing has to be open and no admin rights are needed. On a Framework 16 it gives the CPU, APU, ambient and charger temperatures and both fans.
+* **Libre Hardware Monitor**: needs [Libre Hardware Monitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) open (it can sit in the tray) and running as administrator. Which sensors show depends on the laptop: GPU and SSD temperatures are likely, fans may be missing.
+* **framework_tool**: needs `framework_tool.exe` from the [framework-system releases](https://github.com/FrameworkComputer/framework-system/releases) next to `led_mon.exe` (for the installed app: `%LOCALAPPDATA%\Programs\led_mon`) or on your `PATH`, and led_mon itself running as administrator.
+
+**Read every** sets how often the sensors are read (1 to 30 seconds). Both choices are kept in `%APPDATA%\led_mon\settings.json` (`sensor_source` and `sensor_refresh_seconds`), and the editor shows where the current readings come from.
+
+The **Temperatures** app shows three temperatures as numbers, one under the other (the middle one dimmer). In its settings, pick the sensor for the *Top*, *Middle* and *Bottom number* (blank picks the next one automatically, CPU first) and the unit, C or F. The **Fans** app shows the speed of both fans as bars. `led_mon.exe --diagnose` lists every sensor it can read.
+
 **Where things live**
 
 * Config: `%APPDATA%\led_mon\config.yaml` (copied from the default on first run). The layout editor saves to `config-local.yaml` in the same folder; if you edit that file by hand instead, choose *Reload config* from the tray menu afterwards.
 * API keys for the weather app: `%APPDATA%\led_mon\.env` (see `.env-example`).
 * Log: `%LOCALAPPDATA%\led_mon\led_mon.log` (rotated at 1 MB, 3 old files kept). Set `LOG_LEVEL=debug` in the `.env` file for more detail.
 * If the panels are detected in the wrong order, pick the right one in the layout editor's *Port* boxes, or set `left-location: 1-4.2` / `right-location: 1-3.3` (USB positions) or `left-port: COM4` / `right-port: COM5` in the config. If a pinned panel isn't found, the app picks one automatically.
-* To see what the app finds, run `led_mon.exe --diagnose` from a command prompt. It lists the serial ports (with USB position and USB id), which panel it would use as left and right, and whether it found Open Hardware Monitor and Framework Control. It works while the app is running too.
-* Close other programs that use the panels (such as the LED Matrix GUI, `ledmatrixgui.exe`) before starting the app: on Windows only one program can open a panel's port at a time.
+* To see what the app finds, run `led_mon.exe --diagnose` from a command prompt. It lists the serial ports (with USB position and USB id), which panel it would use as left and right, whether it found Open Hardware Monitor and Framework Control, and where temperatures and fans are read from. It works while the app is running too.
+* Close other programs that use the panels (such as the LED Matrix GUI, `ledmatrixgui.exe`) before starting the app: only one program can open a panel's port at a time.
 
-**Temperatures and fans.** Windows has no standard API for these, so the `temp` and `fan` apps use Framework's `framework_tool`. Download `framework_tool.exe` from the [framework-system releases](https://github.com/FrameworkComputer/framework-system/releases) and put it next to `led_mon.exe` (for the installed app: `%LOCALAPPDATA%\Programs\led_mon`) or anywhere on your `PATH`. Check that `framework_tool --thermal` prints temperatures in a terminal. Without it, those apps show empty bars and the log says why.
+## Apps
 
-**FPS counter.** The `fps` app shows the frames per second of a game, with a graph of the last few seconds below. It follows whichever app is in front, or set *App to watch* in the layout editor to a program's file name (such as `eldenring.exe`). It uses Intel's [PresentMon](https://github.com/GameTechDev/PresentMon) (MIT licence), which the installer puts next to `led_mon.exe`. With the portable exe, download the console exe (`PresentMon-<version>-x64.exe`) from the [PresentMon releases](https://github.com/GameTechDev/PresentMon/releases), rename it to `PresentMon.exe` and put it next to `led_mon.exe`.
+Half-panel apps go in the top or bottom half of a panel; whole-panel apps fill it. Each quadrant can have several apps that take turns. You can set them up in the layout editor, or by hand in the config file (see `led_mon/config-README.md`).
 
-Windows only lets programs read frame timing when they run as administrator or the account is in the *Performance Log Users* group. One-time setup: open *Terminal (Admin)* or *PowerShell (Admin)* from the Start button's right-click menu, run
+* Half panel: CPU cores, CPU graph, GPU graph, memory + battery, disk, network, disk + network, temperatures, fans
+* Whole panel: clock, weather, equalizer, FPS counter, picture (patterns saved in snapshot JSON files)
 
-```powershell
-Add-LocalGroupMember -SID S-1-5-32-559 -Member "$env:USERDOMAIN\$env:USERNAME"
-```
-
-then sign out and back in (S-1-5-32-559 is that group in every Windows language). Until then the app shows a `?` and the log says why. FPS isn't available on Linux.
-
-**Equalizer.** The equalizer listens to whatever is playing on the default output device (speakers or headphones) and follows a switch between them. It does not need `inputmodule-control` on Windows. `input-mode: microphone` uses the default microphone.
-
-**SmartScreen warning.** The builds are not code-signed yet, so Windows may show *"Windows protected your PC"* the first time. Click *More info* > *Run anyway*.
-
-**Antivirus false alarms.** Some antivirus engines flag unsigned programs packaged with PyInstaller, because malware is often packaged the same way. To reduce this, the release builds compile PyInstaller's launcher from source instead of using the shared prebuilt one, don't compress the exe with UPX, and carry version details. The Windows keyboard shortcuts use registered hotkeys rather than watching every keystroke. If a scanner still flags a build from this repository's Actions, the installer usually gets fewer flags than the portable exe.
-
-**Build it yourself** (Windows, Python 3.12):
-
-```powershell
-git clone <repository-url>
-cd led-matrix
-py -3.12 -m venv .venv
-.venv\Scripts\activate
-$env:PYINSTALLER_COMPILE_BOOTLOADER = "1"; python -m pip install --no-binary pyinstaller pyinstaller   # optional: own launcher (needs Visual Studio Build Tools)
-python -m pip install -r requirements.txt pyinstaller pytest
-python -m pytest
-python -m led_mon.led_system_monitor --no-tray          # run from source in the console
-python -m led_mon.led_system_monitor --edit-layout      # the layout editor
-python -m PyInstaller led_mon.spec --noconfirm            # one-dir build: dist\led_mon\led_mon.exe
-$env:LED_MON_ONEFILE = "1"; python -m PyInstaller led_mon.spec --noconfirm --workpath build\onefile   # dist\led_mon.exe
-# Installer (needs Inno Setup 6):
-& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion=2.1.2 installer\led_mon.iss   # dist\led_mon-setup.exe
-```
-
-## Capabilities
-* Display system performance characteristics in real-time
-  * CPU utilization, per core or as a scrolling graph of overall use
-  * GPU utilization as a scrolling graph (pick the GPU when there are several)
-  * Battery charge level and plug status + memory utilization
-  * Disk Input/Output rates 
-  * Network Upload/Download rates
-  * Disk and network together in one half panel
-  * Frames per second of a game (Windows)
-  * Temperature sensor readings
-  * Fan speeds
-* Other apps
-  * Current weather or weather forecast
-  * Time
-  * Display patterns saved in snapshot json files
-  * Equalizer visualization of current audio source
-* Display any system monitoring app on any quadrant
-  * Top or bottom of left or right panel
-  * Assign multiple apps to any quadrant and cycle throiugh them at specified time intervals
-  * Turn on animation and define command arguments for apps
-  * Specified via a yaml config file
-* Keyboard shortcut `ALT` + `I` identifies apps running in each quadrant by displaying abbreviated name
-* Keyboard shortcut `ALT` + `N` forces the display of the next widget, without waiting for the time slice to complete
-* Keyboard shortcut `ALT` + `F` freezes app switching, cuasing the current widget to be displayed indefinitely
-* Keyboard shortcut `ALT` + `U` unfreezes app switching
-* Plugin framework supports simplified development of addiitonal LED Panel applications
-* Automatic detection of left and right LED panels
-* Automatic detection of keyboard device (for keyboard shortcut use)
-
-## Important note about Python environments
-[Pep 668](https://peps.python.org/pep-0668/) provides a mechanism for a Python installation to communicate to tools such as Pip that the installation is externally managed. For Python installations that implement this notification, an attempt to install a package in the global context will be denied, with a message that the installation is externally managed. There are ways to override the PEP 668 constraint (such as using pipx or the --break-system-packages flag). The standard solution, however, is to use a Python Virtual Environment.
-
-The build and installation instructions and scripts for this project assume that every Python installation action is done in a virtual environment. If you want to perform a global installation, it's up to you to make whatever changes are needed to make that work. Also, please note that a misconfigured virtual environment will result in either build-time or run-time failures. See installation notes below for instructions. In general, you should 1) Install package dependencies for the selected virtual environment tool 2) Install the tool 3) Configure the tool per instructions provided by the tool provider 3) Create a virtual environment and activate it 4) Ensure that the virtual environment is currently activated in any shell from which you perform a Python installation, whether launching python directly or invoking a build or installation script. The error message `python: command not found` is a likely indicator of a missing or misconfigured virtual environment.
-
-## Plugins
-Application capabilities can be extended by including plugins. See `plugins/plugins-README.md` for more info. See the plugin configuration near the bottom of this page for plugin-specific configuration instructions.
-
-## Manual Installation (run the app from the command line in the foreground)
-
-Install [PyEnv](https://github.com/pyenv/pyenv) or any other python virtual environment package (Commands below work with PyEnv)
-### For Ubuntu/Debian users:
-```bash
-sudo apt update
-sudo apt install -y python3-numpy python3-psutil python3-serial python3-evdev python3-pynput python3-yaml python3-pip
-cd led-matrix-monitoring
-pyenv install 3.11 # or higher (tested up to 3.14)
-pyenv virtualenv 3.11 led-matrix-env
-pyenv activate led-matrix-env
-python -m pip install -r requirements.txt
-python -m led_mon.led_system_monitor
-```
-
-### For Fedora users:
-```bash
-sudo dnf install -y python3-numpy python3-psutil python3-pyserial python3-evdev python3-pynput python3-pyyaml python3-pip
-cd led-matrix-monitoring\
-pyenv install 3.11 # or higher (tested up to 3.14)
-pyenv virtualenv 3.11 led-matrix-env
-pyenv activate led-matrix-env
-python -m pip install -r requirements.txt
-python -m led_mon.led_system_monitor
-```
-
-### For NixOS users:
-```bash
-# Using the Nix flake (recommended)
-nix run github:timoteuszelle/led-matrix/main
-
-# Or build locally
-nix build
-./result/bin/led-matrix-monitor
-```
-
-### NixOS System Integration
-For NixOS users who want to run LED matrix monitoring as a system service, use the standalone module from this repository.
-
-**1. Add flake input:**
-```nix
-{
-  inputs = {
-    # ... other inputs
-    led-matrix-monitoring.url = "github:timoteuszelle/led-matrix/main";
-  };
-}
-```
-
-**2. Import module:**
-```nix
-{
-  imports = [
-    inputs.led-matrix-monitoring.nixosModules.led-matrix-monitoring
-    # or: inputs.led-matrix-monitoring.nixosModules.ledmatrixmonitoring
-  ];
-}
-```
-
-**3. Configure service (recommended Nix-native schema):**
-```nix
-services.led-matrix-monitoring = {
-  enable = true;
-  configurationMode = "nix-module"; # linuxOS | nix-flake | nix-module
-
-  layout = {
-    duration = 10;
-    quadrants = {
-      topLeft = [{ name = "cpu"; }];
-      bottomLeft = [{ name = "mem-bat"; }];
-      topRight = [{ name = "disk"; }];
-      bottomRight = [{ name = "net"; }];
-    };
-  };
-
-  # Optional for graphical sessions:
-  # environment.DISPLAY = ":0";
-};
-```
-
-**4. Rebuild your system:**
-```bash
-sudo nixos-rebuild switch
-```
-
-**Troubleshooting NixOS Service Issues:**
-```bash
-systemctl status led-matrix-monitoring
-journalctl -u led-matrix-monitoring -f
-```
-
-For a full module option reference (including `configurationMode`, config-source compatibility, runtime/service options, and layout app fields), see `README-NIXOS.md`.
-
-**Alternative: Systemd Service (Advanced)**
-
-For automated continuous execution, you can run as a systemd service instead:
-
-```bash
-# The service runs as a user-level systemd service under the logged in user's account
-./build_and_install.sh
-# manage the service
-systemctl --user start|stop|status fwledmonitor.service
-# The service config file is at ~/.config/systemd/user/fwledmonitor.service.
-# The service executable is at /opt/led_mon/led_mon (sym-linked to /usr/local/bin/led_mon)
-```
-
-## Required Permissions
-
-### LED Matrix Device Access
-
-By default, LED Matrix devices appear as serial devices (e.g., `/dev/ttyACM0`, `/dev/ttyACM1`) that are typically owned by root with restricted permissions. To allow your user to access these devices, you have several options:
-
-#### Option 1: Add User to dialout Group
-```bash
-# Add your user to the dialout group
-sudo usermod -a -G dialout $USER
-
-# Log out and log back in, or use:
-newgrp dialout
-
-# Verify group membership
-groups $USER
-```
-
-#### Option 2: Create Custom udev Rules
-Create a udev rule file to automatically set proper permissions:
-
-```bash
-# Create the udev rule file
-sudo tee /etc/udev/rules.d/99-framework-led-matrix.rules <<EOF
-# Framework 16 LED Matrix Input Modules
-SUBSYSTEM=="tty", ATTRS{idVendor}=="32ac", ATTRS{idProduct}=="0020", MODE="0666", GROUP="dialout"
-SUBSYSTEM=="usb", ATTRS{idVendor}=="32ac", ATTRS{idProduct}=="0020", MODE="0666", GROUP="dialout"
-EOF
-
-# Reload udev rules
-sudo udevadm control --reload-rules
-sudo udevadm trigger
-```
-
-#### Option 3: Run as Root (Not Recommended)
-Since running as root will bypass permission issues, this is not recommended for security reasons. You also may have to work around PEP 668 restrictions on an externally managed Python environment, as discussed above.
-```bash
-sudo python3 -m led_mon.led_system_monitor
-```
-
-## Keyboard Input Access (Optional)
-
-For the keyboard shortcut features to work, the application needs read access to keyboard input devices:
-
-```bash
-# Add user to input group (be aware of security implications)
-sudo usermod -a -G input $USER
-
-# Log out and log back in, then verify
-groups $USER
-```
-
-**Security Note:** Adding your user to the `input` group allows any program running as your user to potentially capture keystrokes. Consider the security implications before doing this, or do not add your user to the group, and use `--no-key-listener` to disable this feature.
-
-## Modifying the Apps Configuration
-* The app is configured *out of the box* to cycle through most of the available widgets, switching to the next widget every 30 seconds.
-* To customize the coonfiguration:
-  * The file `led_mon/config.yaml` contains the default configuration, along with comments explaining the format and meaning of config settings.
-  * Make a copy of `config.yaml`, named `config-local.yaml`, in the `led_mon` directory, and make any desired changes. This file is git-ignored, so it will not be shared or overwritten.
-  * If `config-local.yaml` is present, it will be the active config, and `config.yaml` will be ignored.
-  * When running as a service, both config files will be copied to `/opt/led_mon/_internal/`. Files in this directory will be completely overwritten for every installation, so you should maintain your local configuration in the project repo, not the application installation directory.
-  * The `config.yaml` file may be updated when you run `git pull` in the repo. Check Pull Request comments for an explanation of what changed. Every effort will be made to avoid breaking changes, but they cannot be ruled out at this stage of dvelopment. When new widgets are added to the app, you'll need to manually copy the new widget config settings into your local config file if you have one.
-
-## Verifying Device Access
-
-To check if your LED Matrix devices are properly accessible:
-
-```bash
-# List LED Matrix devices
-ls -la /dev/ttyACM*
-
-# Check if they're accessible by your user
-python3 -c "from serial.tools import list_ports; [print(f'{p.device}: {p.description}') for p in list_ports.comports() if 'LED Matrix' in str(p)]"
-```
-
-## Run from the command line
-```
-cd led-matrix
-python -m led_mon.led_system_monitor [--help] [--no-key-listener] [--disable-plugins] [--list-apps]
-python -m led_mon.led_system_monitor --help #For more verbose help info
-```
-
-## Run as a Linux service
-Enter the top-level project directory, and ensure that a virtual environment is configured and activated.
-```
-./build_and_install.sh
-systemctl --user start|stop|restart|status fwledmonitor
-```
-
-## Keyboard Shortcut
-On Windows, use `Ctrl`+`Alt`+`Shift` instead of `Alt` (see [Windows](#windows)).
-* Alt+I: displays app names in each quadrant while keys are pressed
-* Alt+N: displays the next widget without waiting for the time slice to complete
-* Alt+F: freezes app switching, causing the current widget to be displayed indefinitely
-* Alt+U: unfreezes app switching
-* Disable key listener with `--no-key-listener` program arg
-* To use the key listener, the app must have read permission on the keyboard device (e.g `/dev/input/event<n>`). T use the key listener, you need to add your user account to the `input` group and ensure there is a group read permission on the keyboard device. **NB:** Consider the implications of this. Any program running as a user in the `input` group will be able to capture your keystrokes.
-
-## Plugin Development
-* See `plugins/plugin-README.md` for instructions
-
-## Plugin Configuration and Dependencies
-See `led_mon/config-README.md` for general configuration instructions. Here we provide plugin-specific configuration, dependency, and other information. Plugins that have no special configuration or depenency requirements are not adderssed here.
+Settings for some of the apps, as they appear in the config file:
 
 ### Time (provided by `time_weather_plugin.py`):
 Configure the following arguments in the config file (`app->args`)
@@ -507,17 +165,29 @@ Set arguments (`app -> ags`) for the `weather` app in the desired quadrant
 ### CPU and GPU graphs (built-in apps `cpu-graph` and `gpu-graph`):
 Each row of the half panel is one second, newest at the top, and the length of the row is how busy the CPU or GPU was in that second (the last pixel is dimmer for a part-filled row). The CPU graph is the overall use of all cores, as in Task Manager.
 
-On Windows the GPU graph reads the same counters as Task Manager (the busiest engine of the GPU). On Linux it reads `gpu_busy_percent` for AMD GPUs and `nvidia-smi` for NVIDIA GPUs. To pick a GPU when there are several, set `gpu` to its name (the layout editor lists them):
+The GPU graph reads the same counters as Task Manager (the busiest engine of the GPU). To pick a GPU when there are several, set `gpu` to its name (the layout editor lists them):
 
   `gpu: AMD Radeon RX 7700S`
 
-Without `gpu`, the first GPU found is shown (on Windows, usually the one driving the built-in screen).
+Without `gpu`, the first GPU found is shown (usually the one driving the built-in screen).
 
 ### Disk + network (built-in app `disk-net`):
 The upper part shows disk read (left bar) and write (right bar), the lower part network upload (left) and download (right), like the `disk` and `net` apps in half the space.
 
 ### CPU cores (built-in app `cpu`):
 One spiral per physical core, for up to eight cores. CPUs with more cores (such as the 12-core Ryzen AI 9 HX 370) get a bar per core instead, so every core is shown.
+
+### FPS counter (built-in app `fps`)
+ The `fps` app shows the frames per second of a game, with a graph of the last few seconds below. It follows whichever app is in front, or set *App to watch* in the layout editor to a program's file name (such as `eldenring.exe`). It uses Intel's [PresentMon](https://github.com/GameTechDev/PresentMon) (MIT licence), which the installer puts next to `led_mon.exe`. With the portable exe, download the console exe (`PresentMon-<version>-x64.exe`) from the [PresentMon releases](https://github.com/GameTechDev/PresentMon/releases), rename it to `PresentMon.exe` and put it next to `led_mon.exe`.
+
+Windows only lets programs read frame timing when they run as administrator or the account is in the *Performance Log Users* group. One-time setup: open *Terminal (Admin)* or *PowerShell (Admin)* from the Start button's right-click menu, run
+
+```powershell
+Add-LocalGroupMember -SID S-1-5-32-559 -Member "$env:USERDOMAIN\$env:USERNAME"
+```
+
+then sign out and back in (S-1-5-32-559 is that group in every Windows language). Until then the app shows a `?` and the log says why.
+
 
 ### Snapshot (built-in app, not a plugin):
 Configure the following arguments in the config file (`app -> args`)
@@ -543,11 +213,8 @@ Set the following app settings. These are direct properties of the equalizer app
   `dispose-fn: equalizer_dispose`
 
 Configure the following arguments in the config file (`app -> args`)
-- Use the internal python 9-band filter or use an extenal filter. [EasyEffects](https://github.com/wwmm/easyeffects) is the recommended external filter to use. You can tune the equalizer dynamically as it runs, using the EasyEffects GUI.
-
-  `external-filter: false|true`
 - Select the equalizer input source mode.
-  - `playback` (default): follows the current sink monitor.
+  - `playback` (default): whatever is playing on the default output device (speakers or headphones); it follows a switch between them.
   - `microphone`: captures microphone input (recommended to dedicate a panel/quadrant for this mode).
 
   `input-mode: playback|microphone`
@@ -586,49 +253,51 @@ Configure the following arguments in the config file (`app -> args`)
 
   `silent-pulse-reveal-sec: <seconds>`
 
-The equalizer relies on PulseAudio and Pipewire packages to receive and process the audio output of your computer. The following packages must be installed:
-- Debian/Ubuntu: `sudo apt install pipewire pipewire-pulse wireplumber pulseaudio-utils`
-- Fedora: `sudo dnf install pipewire pipewire-pulseaudio wireplumber`
+## SmartScreen and antivirus
 
-You must add your user to the audio group
-- `sudo usermod -Ag audio $USER`
-- Then logout and login, run `newgrp audio`, or reboot. Verify with `sudo groups`
+The builds are not code-signed yet, so Windows may show *"Windows protected your PC"* the first time. Click *More info* > *Run anyway*.
 
-The Equalizer requires the Framework-provided Input Module Control binary to be intatlled somewhee on your executable path. If it's on the path, the app will find it. Otherwise, the equalizer will not run, and an error will be logged.
-- [Project Info](https://github.com/FrameworkComputer/inputmodule-rs/tree/main) (with instructions to build from source)
-- [Binary Downloads](https://github.com/FrameworkComputer/inputmodule-rs/releases)
+Some antivirus engines flag unsigned programs packaged with PyInstaller, because malware is often packaged the same way. To reduce this, the release builds compile PyInstaller's launcher from source instead of using the shared prebuilt one, don't compress the exe with UPX, and carry version details. The keyboard shortcuts use registered hotkeys rather than watching every keystroke. If a scanner still flags a build from this repository's Actions, the installer usually gets fewer flags than the portable exe.
 
-If there are problems with the audio stream, try restarting the audio streaming services
+## Build it yourself
 
-`systemctl --user restart wireplumber pipewire pipewire-pulse`
+Windows, Python 3.12:
 
-If you use the EasyEffects external filter, add an input effects preset with 9 bands whose center frequencies are equal to the `BAND_CENTERS` list in `visualize.py`. Set q between 1 and 2 initially, and adjust it if you want narrower or wider bands. Set all the gains to 0, then adjust them with the sliders in the GUI whle audio is playing. Save the preset and set it to auto-load on startup.
-
-## Notes
-* See https://github.com/FrameworkComputer/inputmodule-rs for info about the LED matrix device. Be sure to run the code that installs the udev rules for accessing the devices.
-* To list your input devices, use the following python code after installing [Python-evdev](https://python-evdev.readthedocs.io/en/latest/index.html)
+```powershell
+git clone <repository-url>
+cd led-matrix
+py -3.12 -m venv .venv
+.venv\Scripts\activate
+$env:PYINSTALLER_COMPILE_BOOTLOADER = "1"; python -m pip install --no-binary pyinstaller pyinstaller   # optional: own launcher (needs Visual Studio Build Tools)
+python -m pip install -r requirements.txt pyinstaller pytest
+python -m pytest
+python -m led_mon.led_system_monitor --no-tray          # run from source in the console
+python -m led_mon.led_system_monitor --edit-layout      # the layout editor
+python -m PyInstaller led_mon.spec --noconfirm            # one-dir build: dist\led_mon\led_mon.exe
+$env:LED_MON_ONEFILE = "1"; python -m PyInstaller led_mon.spec --noconfirm --workpath build\onefile   # dist\led_mon.exe
+# Installer (needs Inno Setup 6):
+& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion=2.1.2 installer\led_mon.iss   # dist\led_mon-setup.exe
 ```
->>> import evdev
 
->>> devices = [evdev.InputDevice(path) for path in evdev.list_devices()]
->>> for device in devices:
->>>     print(device.path, device.name, device.phys)
-/dev/input/event1    Dell Dell USB Keyboard   usb-0000:00:12.1-2/input0
-/dev/input/event0    Dell USB Optical Mouse   usb-0000:00:12.0-2/input0
-```
-* The baseline reference for calculating the ratio used to display temperature and fan speed readings were arbitarily defined. See `TEMP_REF` and `MAX_FAN_SPEED` in `temp_fan_plugin.py`.  
-* To examine system performance measures manually and in detail, run `python ps-util-sensors.py`
-* To use a different key combination for identifying the running apps, see `KEY_I` and `MODIFIER_KEYS` in `led_system_monitor.py`
+**Making a release:** in GitHub go to *Actions > Windows build > Run workflow*, type a version such as `1.0.0`, and run it. When it finishes, the release `v1.0.0` appears on the Releases page with both files attached. Pushing a tag such as `v1.0.0` does the same. Leaving the version empty makes a test build without a release.
+
+## Plugins
+
+The apps can be extended with plugins. See `led_mon/plugins/plugins-README.md`.
 
 ## Project status
 
-**Status:** Waiting on developer  
-**Waiting on:** Developer: finish testing, then submit upstream  
-**Notes:** Windows port of the led_mon system monitor. Goal: send the changes upstream.  
+**Status:** Testing  
+**Notes:** Windows port of the led_mon system monitor.  
 **Last updated:** 2026-11-02
 
-### Task list
+### Things to test
 
-- [ ] Prepare and format the upstream pull request (Claude can help) (blocked)
-- [ ] Submit the pull request to MidnightJava/led-matrix (blocked)
+The app has been used daily without problems. These are the parts that changed since then:
 
+- [ ] Temperatures app: shows three numbers with each *Read from* choice (Automatic, Framework Control, Libre Hardware Monitor, framework_tool)
+- [ ] Temperatures app: picking sensors for the top, middle and bottom numbers, and switching between C and F
+- [ ] Fans app: both fans move with the fan speed
+- [ ] *Read every* changes how often the numbers update
+- [ ] `led_mon.exe --diagnose` lists the temperature and fan sources and sensors
+- [ ] Quick check that nothing else changed: equalizer, keyboard shortcuts, battery charging animation, brightness following the screen
