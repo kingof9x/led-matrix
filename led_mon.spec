@@ -24,6 +24,7 @@ hiddenimports = [
     'scipy.linalg._flapack', 'scipy.signal',
     # Plugins are loaded from files at runtime, so PyInstaller can't see what they import
     'led_mon.patterns', 'led_mon.drawing', 'led_mon.shared_state', 'led_mon.framework_tool',
+    'led_mon.sensor_sources', 'led_mon.framework_control_sensors', 'led_mon.libre_hardware_monitor_sensors',
     'led_mon.equalizer_files.visualize',
     # The layout editor is imported only when started with --edit-layout
     'led_mon.rendering', 'led_mon.control', 'led_mon.editor', 'led_mon.editor.window', 'led_mon.editor.preview',

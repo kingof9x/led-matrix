@@ -502,9 +502,13 @@ def app(args, base_apps, plugin_apps):
     def handle_control_request(message):
         cmd = message.get('cmd')
         if cmd == 'status':
-            return {'ports': [device for _, device in led_devices],
-                    'config_file': platform_utils.resolve_config_file(args.config_file),
-                    'brightness': brightness.get()}
+            reply = {'ports': [device for _, device in led_devices],
+                     'config_file': platform_utils.resolve_config_file(args.config_file),
+                     'brightness': brightness.get()}
+            if platform_utils.IS_WINDOWS:
+                from led_mon import sensor_sources
+                reply['sensor_source'] = sensor_sources.current().status()
+            return reply
         if cmd == 'brightness':
             return {'brightness': brightness.set(message.get('follow_screen'), message.get('level'))}
         if cmd == 'reload':
@@ -520,6 +524,13 @@ def app(args, base_apps, plugin_apps):
         if cmd == 'identify':
             request_identify()
             return {}
+        if cmd == 'sensor_source':
+            # The editor changed the temperature and fan source in settings.json, or asks what is being read
+            from led_mon import sensor_sources
+            source = sensor_sources.current()
+            if message.get('reload'):
+                source.reload()
+            return {'sensor_source': source.status()}
         return {'ok': False, 'error': f"Unknown command {cmd}"}
 
     if IS_WINDOWS:

@@ -155,6 +155,75 @@ jobs:
             if ($p.ExitCode -ne 0) { throw "$exe --edit-layout exited with $($p.ExitCode)" }
           }
 
+      - name: Check the temperature and fan sources in the built exe
+        shell: pwsh
+        run: |
+          $headers = @{ Authorization = "Bearer ${{ github.token }}"; "X-GitHub-Api-Version" = "2022-11-28" }
+          # A stand-in for Framework Control's service: its config file (where the port is read from) and /api/thermal
+          $fake = "$PWD\fake-programfiles"
+          New-Item -ItemType Directory -Force "$fake\FrameworkControl" | Out-Null
+          Set-Content "$fake\FrameworkControl\FrameworkControlService.xml" '<service><env name="FRAMEWORK_CONTROL_PORT" value="8765"/></service>'
+          $server = Start-Process python -ArgumentList ".github\ci\fake_framework_control.py", "8765" -PassThru -NoNewWindow
+          # Libre Hardware Monitor, running as admin (the runner is admin), so its WMI sensors exist
+          try {
+            $release = Invoke-RestMethod -Headers $headers "https://api.github.com/repos/LibreHardwareMonitor/LibreHardwareMonitor/releases/latest"
+            $asset = @($release.assets | Where-Object { $_.name -match '\.zip$' } | Sort-Object { $_.name -notmatch 'net4' })[0]
+            Write-Host "Libre Hardware Monitor $($release.tag_name): $($asset.name)"
+            Invoke-WebRequest -Headers $headers $asset.browser_download_url -OutFile lhm.zip
+            Expand-Archive lhm.zip lhm -Force
+            $lhmExe = (Get-ChildItem lhm -Recurse -Filter LibreHardwareMonitor.exe | Select-Object -First 1).FullName
+            $lhm = Start-Process $lhmExe -PassThru
+          } catch { Write-Host "Couldn't start Libre Hardware Monitor: $_" }
+          # framework_tool.exe next to the portable exe
+          try {
+            $release = Invoke-RestMethod -Headers $headers "https://api.github.com/repos/FrameworkComputer/framework-system/releases/latest"
+            $asset = @($release.assets | Where-Object { $_.name -eq 'framework_tool.exe' })[0]
+            Write-Host "framework_tool $($release.tag_name)"
+            Invoke-WebRequest -Headers $headers $asset.browser_download_url -OutFile dist\framework_tool.exe
+          } catch { Write-Host "Couldn't download framework_tool: $_" }
+          Start-Sleep -Seconds 15
+
+          # Windows gives 64-bit programs ProgramFiles from ProgramW6432, so point both at the stand-in
+          $env:ProgramFiles = $fake
+          $env:ProgramW6432 = $fake
+          if ($lhm) {
+            Write-Host "Libre Hardware Monitor still running: $(-not $lhm.HasExited)"
+            try { Get-CimInstance -Namespace root/LibreHardwareMonitor -ClassName Sensor -ErrorAction Stop |
+                  Where-Object { $_.SensorType -in 'Temperature', 'Fan' } | Format-Table Parent, Name, SensorType, Value }
+            catch { Write-Host "Its WMI sensors aren't there: $_" }
+          }
+          $env:APPDATA = "$PWD\sensor-appdata"
+          $env:LOCALAPPDATA = "$PWD\sensor-appdata"
+          New-Item -ItemType Directory -Force "sensor-appdata\led_mon" | Out-Null
+          $outputs = @{}
+          foreach ($choice in @("auto", "framework_control", "libre_hardware_monitor", "framework_tool")) {
+            Set-Content "sensor-appdata\led_mon\settings.json" "{`"sensor_source`": `"$choice`"}"
+            $p = Start-Process -FilePath dist\led_mon.exe -ArgumentList "--diagnose" -PassThru -NoNewWindow `
+                 -RedirectStandardOutput sensor-out.txt -RedirectStandardError sensor-err.txt
+            $null = $p.Handle
+            if (-not $p.WaitForExit(120000)) { $p.Kill(); throw "--diagnose did not exit" }
+            $text = (Get-Content sensor-out.txt, sensor-err.txt -ErrorAction SilentlyContinue) -join "`n"
+            Write-Host "== sensor_source = $choice"
+            Write-Host $text
+            if ($p.ExitCode -ne 0) { throw "--diagnose exited with $($p.ExitCode)" }
+            if ($text -notmatch "Chosen source: .*\($choice\)") { throw "--diagnose didn't use the $choice setting" }
+            if ($text -match "Traceback|No module named") { throw "--diagnose hit an error with $choice" }
+            $outputs[$choice] = $text
+          }
+          Stop-Process -Id $server.Id -ErrorAction SilentlyContinue
+          if ($lhm) { Stop-Process -Id $lhm.Id -ErrorAction SilentlyContinue }
+          # Framework Control (the stand-in) gives its four temperatures and both fans, and both choices that
+          # include it put them on the panels
+          if ($outputs["auto"] -notmatch "Framework Control: 4 temperatures \[44, 43, 41, 40\], 2 fans \[0, 0\]") { throw "Framework Control wasn't read" }
+          foreach ($choice in @("auto", "framework_control")) {
+            if ($outputs[$choice] -notmatch "Panels get: temperatures from Framework Control, fans from Framework Control") { throw "$choice didn't use Framework Control" }
+            if ($outputs[$choice] -notmatch "Temperatures app can show: cpu@4c \(44 C\), apu_f75303@4d \(43 C\)") { throw "$choice didn't list Framework Control's sensors" }
+          }
+          # A fixed choice of another source must not use Framework Control's readings
+          foreach ($choice in @("libre_hardware_monitor", "framework_tool")) {
+            if ($outputs[$choice] -match "Panels get: temperatures from Framework Control|fans from Framework Control") { throw "$choice used Framework Control" }
+          }
+
       # Code signing placeholder (not enabled yet). Unsigned builds show a SmartScreen warning.
       # - name: Sign executables
       #   shell: pwsh

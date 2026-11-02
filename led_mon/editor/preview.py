@@ -91,6 +91,13 @@ def monitor_status():
     return reply if reply and reply.get("ok") else None
 
 
+def sensor_source_status(reload=False):
+    """What the running monitor reads temperatures and fans from (see sensor_sources.SensorSource.status),
+    or None if it isn't running. reload: read the choice from settings.json again first."""
+    reply = control.request({"cmd": "sensor_source", "reload": bool(reload)}, timeout=3.0)
+    return reply.get("sensor_source") if reply and reply.get("ok") else None
+
+
 def brightness():
     """The brightness choice ({'follow_screen': bool, 'level': 0-100}): the running monitor's, or the saved one."""
     status = monitor_status()

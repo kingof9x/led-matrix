@@ -26,7 +26,7 @@ def test_report_lists_ports_and_panels(tmp_path, monkeypatch):
     ports = [port("COM3", location="1-2:x.0", vid=0x8087, pid=0x0A2B, description="Bluetooth"),
              port("COM4", location="1-3.2:x.0", description="LED Matrix"),
              port("COM5", location="1-3.3:x.0", description="LED Matrix")]
-    text = "\n".join(diagnose.report(config, ports, find_apps=lambda: (None, None)))
+    text = "\n".join(diagnose.report(config, ports, find_apps=lambda: (None, None), read_sensors=lambda: []))
     assert f"Config file:   {config}" in text
     assert "COM3  location=1-2:x.0  usb=8087:0A2B  Bluetooth\n" in text
     assert "COM4  location=1-3.2:x.0  usb=32AC:0020  LED Matrix  <- LED Matrix" in text
@@ -41,7 +41,7 @@ def test_report_uses_the_config_pins(tmp_path, monkeypatch):
     monkeypatch.setattr(shared_state, "location_overrides", {})
     config = write_config(tmp_path, "left-location: 1-3.3\n")
     ports = [port("COM4", location="1-3.2:x.0"), port("COM5", location="1-3.3:x.0")]
-    text = "\n".join(diagnose.report(config, ports, find_apps=lambda: (None, None)))
+    text = "\n".join(diagnose.report(config, ports, find_apps=lambda: (None, None), read_sensors=lambda: []))
     assert "left-location: 1-3.3" in text
     assert "Left:  COM5" in text
     assert "Right: COM4" in text
@@ -50,8 +50,21 @@ def test_report_uses_the_config_pins(tmp_path, monkeypatch):
 def test_report_without_panels_or_config(tmp_path, monkeypatch):
     monkeypatch.setattr(shared_state, "port_overrides", {})
     monkeypatch.setattr(shared_state, "location_overrides", {})
-    text = "\n".join(diagnose.report(str(tmp_path / "missing.yaml"), [], find_apps=None))
+    text = "\n".join(diagnose.report(str(tmp_path / "missing.yaml"), [], find_apps=None, read_sensors=lambda: []))
     assert "could not be read" in text
     assert "Serial ports:\n  none" in text
     assert "Left:  not found" in text
     assert "Right: not found" in text
+
+
+def test_report_includes_the_temperature_and_fan_section(tmp_path, monkeypatch):
+    monkeypatch.setattr(shared_state, "port_overrides", {})
+    monkeypatch.setattr(shared_state, "location_overrides", {})
+    lines = diagnose.report(str(tmp_path / "missing.yaml"), [], find_apps=lambda: (None, None),
+                            read_sensors=lambda: ["Temperatures and fans:", "  Chosen source: Automatic (auto)"])
+    assert "  Chosen source: Automatic (auto)" in lines
+
+    def broken():
+        raise RuntimeError("no wmi")
+    lines = diagnose.report(str(tmp_path / "missing.yaml"), [], find_apps=lambda: (None, None), read_sensors=broken)
+    assert "Could not read temperatures and fans: no wmi" in lines

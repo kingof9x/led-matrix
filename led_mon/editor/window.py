@@ -327,14 +327,39 @@ class SettingsPane(ttk.Frame):
         self.title.pack(anchor="w")
         self.description = ttk.Label(self, text="", wraplength=240, justify="left", foreground="#555555")
         self.description.pack(anchor="w", pady=(2, 8))
-        self.form = ttk.Frame(self)
-        self.form.pack(fill="x", anchor="n")
+        # The form scrolls, so long settings (Temperatures) aren't cut off on small or scaled screens
+        holder = ttk.Frame(self)
+        holder.pack(fill="both", expand=True, anchor="n")
+        self.canvas = tk.Canvas(holder, highlightthickness=0, borderwidth=0, width=260)
+        self.scrollbar = ttk.Scrollbar(holder, orient="vertical", command=self.canvas.yview)
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.form = ttk.Frame(self.canvas)
+        self._form_window = self.canvas.create_window((0, 0), window=self.form, anchor="nw")
+        self.form.bind("<Configure>", self._on_form_resized)
+        self.canvas.bind("<Configure>", lambda e: self.canvas.itemconfigure(self._form_window, width=e.width))
+        self.canvas.bind("<Enter>", lambda e: self.canvas.bind_all("<MouseWheel>", self._on_wheel))
+        self.canvas.bind("<Leave>", lambda e: self.canvas.unbind_all("<MouseWheel>"))
         self.variables = []
+
+    def _on_form_resized(self, event=None):
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        # Show the scrollbar only when the settings are taller than the space
+        if self.form.winfo_reqheight() > self.canvas.winfo_height() > 1:
+            if not self.scrollbar.winfo_ismapped():
+                self.scrollbar.pack(side="right", fill="y")
+        elif self.scrollbar.winfo_ismapped():
+            self.scrollbar.pack_forget()
+
+    def _on_wheel(self, event):
+        if self.scrollbar.winfo_ismapped():
+            self.canvas.yview_scroll(int(-event.delta / 120) or (-1 if event.delta > 0 else 1), "units")
 
     def show(self, entry, where, side):
         for child in self.form.winfo_children():
             child.destroy()
         self.variables = []
+        self.canvas.yview_moveto(0)
         if entry is None:
             self.title.configure(text="No app selected" if where is None else "Empty slot")
             self.description.configure(text="Drag an app from the list on the left onto a panel, "
@@ -344,10 +369,11 @@ class SettingsPane(ttk.Frame):
         info = catalog.get(entry["name"])
         self.title.configure(text=info.label)
         self.description.configure(text=f"{info.description}\n{where}")
-        if not info.settings:
+        settings = [st for st in info.settings if st.kind != "sensor_source" or platform_utils.IS_WINDOWS]
+        if not settings:
             ttk.Label(self.form, text="This app has no settings.").pack(anchor="w")
             return
-        for setting in info.settings:
+        for setting in settings:
             self.add_field(entry, setting, side)
 
     def _get(self, entry, setting):
@@ -360,16 +386,99 @@ class SettingsPane(ttk.Frame):
             target = entry
         else:
             target = entry.setdefault("args", {})
-        if value in (None, "", []) and setting.kind in ("text", "list", "gpu"):
+        if value in (None, "", []) and setting.kind in ("text", "list", "gpu", "sensor"):
             target.pop(setting.key, None)
         else:
             target[setting.key] = value
         self.editor.changed(refresh_settings=False)
 
+    def add_sensor_source(self, row):
+        """Where temperatures and fans come from, and how often: settings for the whole app (settings.json)."""
+        from led_mon import sensor_sources
+        source = sensor_sources.current()
+        frame = ttk.LabelFrame(row, text="Temperatures and fans (all panels)", padding=(8, 4))
+        frame.pack(fill="x", pady=(6, 0))
+        ttk.Label(frame, text="Read from").pack(anchor="w")
+        keys = {label: key for key, label in sensor_sources.SOURCES}
+        source_var = tk.StringVar(value=sensor_sources.LABELS[source.choice])
+        box = ttk.Combobox(frame, textvariable=source_var, values=list(keys), state="readonly", width=26)
+        box.pack(anchor="w")
+        help_label = ttk.Label(frame, text=sensor_sources.HELP[source.choice], wraplength=230, justify="left",
+                               foreground="#777777", font=("Segoe UI", 8))
+        help_label.pack(anchor="w")
+        box.bind("<<ComboboxSelected>>", lambda e: self.editor.choose_sensor_source(keys[source_var.get()]))
+
+        ttk.Label(frame, text="Read every").pack(anchor="w", pady=(6, 0))
+        labels = {f"{n} second{'s' if n != 1 else ''}": n for n in sensor_sources.REFRESH_CHOICES}
+        current = next((label for label, n in labels.items() if n == source.refresh), f"{source.refresh:g} seconds")
+        refresh_var = tk.StringVar(value=current)
+        refresh = ttk.Combobox(frame, textvariable=refresh_var, values=list(labels), state="readonly", width=12)
+        refresh.pack(anchor="w")
+        refresh.bind("<<ComboboxSelected>>", lambda e: self.editor.choose_sensor_refresh(labels[refresh_var.get()]))
+        ttk.Label(frame, text=sensor_sources.REFRESH_HELP, wraplength=230, justify="left",
+                  foreground="#777777", font=("Segoe UI", 8)).pack(anchor="w")
+
+        status = ttk.Label(frame, text="", wraplength=230, justify="left", foreground="#2f6f3e")
+        status.pack(anchor="w", pady=(6, 0))
+        self.editor.sensor_help = help_label
+        self.editor.sensor_status = status
+        self.editor.sensor_source_var = source_var
+        monitor = self.editor.monitor
+        self.editor.show_sensor_status(monitor.get("sensor_source") if monitor else None)
+        self.variables += [source_var, refresh_var]
+
+    def add_sensor_picker(self, entry, setting, row, value):
+        """Which sensor one of the Temperatures app's numbers shows; blank picks one automatically."""
+        from led_mon import sensor_sources
+        ttk.Label(row, text=setting.label).pack(anchor="w")
+        try:
+            readings = sensor_sources.named_temps()
+        except Exception as e:
+            log.debug(f"Could not read the temperature sensors: {e}")
+            readings = []
+        names = [name for name, _ in readings]
+        values = {name: v for name, v in readings}
+        automatic = "Automatic"
+        options = [automatic] + names
+        labels = [automatic] + [f"{name} ({values[name]:.0f} °C now)" for name in names]
+        if value and value not in names:
+            # Picked before, but it has no reading right now
+            options.append(value)
+            labels.append(f"{value} (no reading now)")
+        var = tk.StringVar(value=labels[options.index(value)] if value else automatic)
+        line = ttk.Frame(row)
+        line.pack(anchor="w", fill="x")
+        box = ttk.Combobox(line, textvariable=var, values=labels, state="readonly", width=30)
+        box.pack(side="left")
+
+        def chosen(event=None):
+            if var.get() in labels:
+                option = options[labels.index(var.get())]
+                self._set(entry, setting, "" if option == automatic else option)
+        box.bind("<<ComboboxSelected>>", chosen)
+        if setting.key == "sensor_1":
+            # The sensor list fills in once the source has answered; this reads it again
+            ttk.Button(line, text="Refresh list", width=11,
+                       command=lambda: self.editor.refresh_settings()).pack(side="left", padx=(4, 0))
+            if not names:
+                ttk.Label(row, text="No sensors read yet. Check where temperatures are read from below, "
+                          "then press Refresh list.", wraplength=240, foreground="#777777",
+                          font=("Segoe UI", 8)).pack(anchor="w")
+        self.variables.append(var)
+
     def add_field(self, entry, setting, side):
         row = ttk.Frame(self.form)
         row.pack(fill="x", pady=3)
         value = self._get(entry, setting)
+        if setting.kind == "sensor_source":
+            self.add_sensor_source(row)
+            return
+        if setting.kind == "sensor":
+            self.add_sensor_picker(entry, setting, row, value)
+            if setting.help:
+                ttk.Label(row, text=setting.help, wraplength=240, foreground="#777777",
+                          font=("Segoe UI", 8)).pack(anchor="w")
+            return
         if setting.kind == "bool":
             var = tk.BooleanVar(value=bool(value))
             ttk.Checkbutton(row, text=setting.label, variable=var,
@@ -540,6 +649,9 @@ class LayoutEditor:
         self.brightness = BrightnessControl(palette, state["follow_screen"], state["level"], self.on_brightness_changed,
                                             length=230)
         self.brightness.pack(anchor="w", fill="x", pady=(12, 0))
+        # The "Read from" status line, while the Temperatures or Fans app's settings are showing
+        self.sensor_status = None
+        self.sensor_help = None
 
         self.panels = {}
         for column, side in enumerate(SIDES, start=1):
@@ -575,6 +687,50 @@ class LayoutEditor:
 
         self.fill_app_list()
         self.fill_ports()
+
+    def choose_sensor_source(self, key):
+        """Where temperatures and fans come from: saved to settings.json now, no Apply needed."""
+        from led_mon import sensor_sources
+        key = sensor_sources.current().set(key)
+        if self._alive(self.sensor_help):
+            self.sensor_help.configure(text=sensor_sources.HELP[key])
+        self._check_sensor_source()
+        return key
+
+    def choose_sensor_refresh(self, seconds):
+        from led_mon import sensor_sources
+        seconds = sensor_sources.current().set_refresh(seconds)
+        self._check_sensor_source()
+        return seconds
+
+    def _check_sensor_source(self):
+        if self._alive(self.sensor_status):
+            self.sensor_status.configure(text="Saved. Checking...")
+
+        def run():
+            status = preview.sensor_source_status(reload=True)
+            self.call_soon(lambda: self.show_sensor_status(status, saved=True))
+        threading.Thread(target=run, daemon=True).start()
+
+    @staticmethod
+    def _alive(widget):
+        try:
+            return widget is not None and bool(widget.winfo_exists())
+        except tk.TclError:
+            return False
+
+    def show_sensor_status(self, status, saved=False):
+        if not self._alive(self.sensor_status):
+            return
+        from led_mon import sensor_sources
+        if status is None:
+            text = ("Saved. The monitor isn't running; it will use this when it starts." if saved
+                    else "The monitor isn't running.")
+        else:
+            text = sensor_sources.describe(status)
+            if saved and not status.get("reading"):
+                text = "Saved. " + text
+        self.sensor_status.configure(text=text)
 
     def fill_app_list(self, plugin_names=()):
         self.app_list.delete(*self.app_list.get_children())
@@ -774,6 +930,8 @@ class LayoutEditor:
     def show_monitor_status(self, status):
         was_running = self.monitor is not None
         self.monitor = status
+        if not self.sensor_status_pending():
+            self.show_sensor_status(status.get("sensor_source") if status else None)
         if status:
             ports = ", ".join(status.get("ports", [])) or "no panels"
             text = f"Monitor is running ({ports})."
@@ -786,6 +944,9 @@ class LayoutEditor:
             self.resume_button.state(["disabled"])
         if not self.status.cget("text") or was_running != (status is not None) or self.status.cget("text").startswith(("Monitor is", "The monitor isn't")):
             self.set_status(text)
+
+    def sensor_status_pending(self):
+        return self._alive(self.sensor_status) and self.sensor_status.cget("text") == "Saved. Checking..."
 
     def load_brightness(self):
         def run():

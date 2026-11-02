@@ -202,6 +202,10 @@ def test_monitor_shows_preview_and_reloads(monkeypatch, tmp_path):
         while (status := control.request({"cmd": "status"})) is None and time.monotonic() < deadline:
             time.sleep(0.1)
         assert status["ports"] == ["PANEL0", "PANEL1"]
+        # The layout editor asks which temperature and fan source is in use after changing it
+        reply = control.request({"cmd": "sensor_source", "reload": True})
+        assert reply["ok"] and reply["sensor_source"]["choice"] in ("auto", "framework_control",
+                                                                     "libre_hardware_monitor", "framework_tool")
         assert latest("left")[:, 0].all()  # the CPU app's border
 
         frame = np.zeros((9, 34), dtype=int)
