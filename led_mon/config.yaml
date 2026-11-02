@@ -4,7 +4,7 @@
 
 duration: 10
 
-# Optional: pin each panel to a serial port instead of auto-detecting it (e.g. COM4 on Windows, /dev/ttyACM0 on Linux)
+# Optional: pin each panel to a serial port instead of auto-detecting it (e.g. COM4)
 # left-port: COM4
 # right-port: COM5
 # Or pin each panel to its USB position, which stays the same if Windows renumbers the COM ports

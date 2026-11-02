@@ -227,13 +227,21 @@ def find_framework_control(environ=None):
             if os.path.isfile(shortcut):
                 return Target("file", shortcut)
 
+    port = framework_control_port(environ)
+    if port:
+        return Target("url", f"http://127.0.0.1:{port}")
+    return None
+
+
+def framework_control_port(environ=None):
+    """The port of the Framework Control service's local web page and API, or None if not installed."""
+    environ = os.environ if environ is None else environ
     for var in ("ProgramFiles", "ProgramW6432", "ProgramFiles(x86)"):
         if not environ.get(var):
             continue
-        config = os.path.join(environ[var], FC_INSTALL_FOLDER, FC_SERVICE_CONFIG)
-        port = _read_fc_port(config)
+        port = _read_fc_port(os.path.join(environ[var], FC_INSTALL_FOLDER, FC_SERVICE_CONFIG))
         if port:
-            return Target("url", f"http://127.0.0.1:{port}")
+            return port
     return None
 
 

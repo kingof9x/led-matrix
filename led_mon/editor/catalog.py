@@ -16,13 +16,15 @@ FULL = "full"
 # Where a setting is stored: in the app's args mapping, or on the app entry itself (e.g. animate)
 ARGS = "args"
 APP = "app"
+# Stored in settings.json for the whole app, not in this app's config entry (e.g. where temperatures come from)
+GLOBAL = "global"
 
 
 @dataclass
 class Setting:
     key: str
     label: str
-    kind: str                     # bool | choice | text | int | list | multi | snapshot | gpu
+    kind: str                     # bool | choice | text | int | list | multi | snapshot | gpu | sensor | sensor_source
     default: object = None
     options: tuple = ()
     target: str = ARGS
@@ -51,8 +53,17 @@ APPS = [
     AppInfo("mem-bat", "Memory + battery", "Memory use on top, battery level below (pulses when charging).", HALF),
     AppInfo("disk", "Disk", "Disk read (left bar) and write (right bar) activity.", HALF),
     AppInfo("net", "Network", "Upload (left bar) and download (right bar) activity.", HALF),
-    AppInfo("temp", "Temperatures", "Up to eight temperature sensors as spirals. On Windows this needs framework_tool.", HALF),
-    AppInfo("fan", "Fans", "Speed of the two fans as bars. On Windows this needs framework_tool.", HALF),
+    AppInfo("temp", "Temperatures", "Three temperatures as numbers, one under the other (the middle one dimmer). "
+            "Pick which sensor each one shows, and Celsius or Fahrenheit.", HALF, [
+        Setting("sensor_1", "Top number", "sensor", "", help="Blank picks the next sensor automatically (CPU first)."),
+        Setting("sensor_2", "Middle number", "sensor", ""),
+        Setting("sensor_3", "Bottom number", "sensor", ""),
+        Setting("unit", "Unit", "choice", "C", options=("C", "F"), help="C: Celsius, F: Fahrenheit"),
+        Setting("sensor_source", "Read from", "sensor_source", None, target=GLOBAL),
+    ]),
+    AppInfo("fan", "Fans", "Speed of the two fans as bars.", HALF, [
+        Setting("sensor_source", "Read from", "sensor_source", None, target=GLOBAL),
+    ]),
     AppInfo("time", "Clock", "The current time.", FULL, [
         Setting("fmt_24_hour", "24-hour clock", "bool", False),
         Setting("timezone", "Time zone", "text", "", help="Blank for this computer's time zone, or an IANA name such as Europe/London"),
@@ -137,12 +148,14 @@ def new_app(name, side):
     entry = {"name": name}
     args = {}
     for s in info.settings:
+        if s.target == GLOBAL:
+            continue
         if s.kind == "snapshot":
             files = snapshot_files(side)
             value = files[0] if files else None
         else:
             value = copy.deepcopy(s.default)
-        if value in (None, "", []) and s.kind in ("text", "list", "snapshot", "gpu"):
+        if value in (None, "", []) and s.kind in ("text", "list", "snapshot", "gpu", "sensor"):
             continue
         if s.target == APP:
             entry[s.key] = value

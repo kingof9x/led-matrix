@@ -17,10 +17,9 @@ maintainers = [
 keywords = ["framework", "led", "matrix", "system", "monitor", "hardware"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
-    "Environment :: Console",
+    "Environment :: Win32 (MS Windows)",
     "Intended Audience :: End Users/Desktop",
     "License :: OSI Approved :: MIT License",
-    "Operating System :: POSIX :: Linux",
     "Operating System :: Microsoft :: Windows",
     "Operating System :: Microsoft :: Windows :: Windows 11",
     "Programming Language :: Python :: 3",
@@ -38,16 +37,12 @@ dependencies = [
     "numpy",
     "psutil",
     "pyserial",
-    "evdev; sys_platform == 'linux'",
-    "pynput; sys_platform != 'win32'",
-    "pulsectl; sys_platform == 'linux'",
-    "sounddevice; sys_platform == 'linux'",
-    "soundcard; sys_platform == 'win32'",
-    "pystray; sys_platform == 'win32'",
-    "pillow; sys_platform == 'win32'",
-    "pywin32; sys_platform == 'win32'",
-    "wmi; sys_platform == 'win32'",
-    "tzdata; sys_platform == 'win32'",
+    "soundcard",
+    "pystray",
+    "pillow",
+    "pywin32",
+    "wmi",
+    "tzdata",
 ]
 
 [project.optional-dependencies]

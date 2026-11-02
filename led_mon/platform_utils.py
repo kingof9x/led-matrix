@@ -1,6 +1,5 @@
-# Small helpers that hide the differences between Linux and Windows.
-# Everything Windows-specific in the app should go through here (or be guarded by IS_WINDOWS),
-# so the Linux/NixOS behaviour stays exactly as it was.
+# Small Windows helpers: config and log locations, logging, single instance, error boxes.
+# The Windows API calls are guarded by IS_WINDOWS so the tests can also run elsewhere.
 
 # Built In Dependencies
 import os
@@ -10,7 +9,6 @@ import logging
 from logging.handlers import RotatingFileHandler
 
 IS_WINDOWS = os.name == "nt"
-IS_LINUX = sys.platform.startswith("linux")
 
 APP_NAME = "led_mon"
 SINGLE_INSTANCE_MUTEX = "led_mon_single_instance"
@@ -45,14 +43,9 @@ def app_dir():
 
 
 def user_config_dir():
-    """Where the user's config.yaml / config-local.yaml / .env live.
-
-    Windows: %APPDATA%\\led_mon. Linux: next to the package, as before.
-    """
-    if IS_WINDOWS:
-        base = os.environ.get("APPDATA") or os.path.expanduser("~")
-        return os.path.join(base, APP_NAME)
-    return package_dir()
+    """Where the user's config.yaml / config-local.yaml / .env live: %APPDATA%\\led_mon."""
+    base = os.environ.get("APPDATA") or os.path.expanduser("~")
+    return os.path.join(base, APP_NAME)
 
 
 def user_log_dir():
@@ -65,9 +58,7 @@ def log_file_path():
 
 
 def ensure_user_config():
-    """On Windows, copy the bundled config.yaml to %APPDATA%\\led_mon on first run."""
-    if not IS_WINDOWS:
-        return
+    """Copy the bundled config.yaml to %APPDATA%\\led_mon on first run."""
     cfg_dir = user_config_dir()
     local_cfg = os.path.join(cfg_dir, "config-local.yaml")
     cfg = os.path.join(cfg_dir, "config.yaml")
@@ -86,7 +77,7 @@ def resolve_config_file(cli_config_file=None):
     """Return the config file path to use.
 
     Priority: --config-file, then CONFIG_FILE env var, then config-local.yaml, then config.yaml
-    in user_config_dir(). On Windows the bundled config.yaml is used if the user one can't be created.
+    in user_config_dir(). The bundled config.yaml is used if the user one can't be created.
     """
     if cli_config_file:
         log.debug(f"Using config file from program arg --config-file: {cli_config_file}")
@@ -102,26 +93,19 @@ def resolve_config_file(cli_config_file=None):
         log.debug(f"Using local config file {config_file}")
         return config_file
     config_file = os.path.join(cfg_dir, "config.yaml")
-    if IS_WINDOWS and not os.path.exists(config_file):
+    if not os.path.exists(config_file):
         config_file = os.path.join(package_dir(), "config.yaml")
     log.debug(f"Using default config file {config_file}")
     return config_file
 
 
 def load_env_file():
-    """Load the .env file with API keys.
-
-    Linux: as before, the current-directory .env when not frozen (frozen builds get env vars from systemd).
-    Windows: %APPDATA%\\led_mon\\.env, frozen or not.
-    """
+    """Load the .env file with API keys from %APPDATA%\\led_mon\\.env."""
     try:
         from dotenv import load_dotenv
     except ImportError:
         return
-    if IS_WINDOWS:
-        load_dotenv(os.path.join(user_config_dir(), ".env"))
-    elif not is_frozen():
-        load_dotenv()
+    load_dotenv(os.path.join(user_config_dir(), ".env"))
 
 
 def log_level_from_env(default=logging.WARNING):

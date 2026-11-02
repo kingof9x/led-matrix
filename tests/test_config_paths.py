@@ -1,4 +1,4 @@
-# Config / log path resolution per OS (os differences simulated with monkeypatch)
+# Config / log path resolution (Windows folders simulated with monkeypatch)
 import os
 
 import pytest
@@ -13,12 +13,6 @@ def windows(monkeypatch, tmp_path):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "Local"))
     monkeypatch.delenv("CONFIG_FILE", raising=False)
     return tmp_path
-
-
-@pytest.fixture
-def linux(monkeypatch):
-    monkeypatch.setattr(platform_utils, "IS_WINDOWS", False)
-    monkeypatch.delenv("CONFIG_FILE", raising=False)
 
 
 def test_windows_first_run_copies_bundled_config(windows):
@@ -56,11 +50,3 @@ def test_cli_and_env_take_priority(windows, monkeypatch):
 def test_windows_log_path(windows):
     assert platform_utils.log_file_path() == os.path.join(str(windows), "Local", "led_mon", "led_mon.log")
 
-
-def test_linux_uses_package_dir(linux):
-    expected = os.path.join(platform_utils.package_dir(), "config.yaml")
-    local = os.path.join(platform_utils.package_dir(), "config-local.yaml")
-    if os.path.exists(local):
-        expected = local
-    assert platform_utils.resolve_config_file() == expected
-    assert platform_utils.user_config_dir() == platform_utils.package_dir()

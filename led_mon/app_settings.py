@@ -19,6 +19,9 @@ DEFAULT_SETTINGS = {
     "brightness_level": 70,
     # Full path to OpenHardwareMonitor.exe, or the folder it is in. Empty: look for it automatically.
     "open_hardware_monitor_path": "",
+    # Where the Temperatures and Fans apps read from on Windows: auto, framework_control,
+    # libre_hardware_monitor or framework_tool (see sensor_sources.py)
+    "sensor_source": "auto",
 }
 
 

@@ -24,7 +24,7 @@ def _panel(entry):
     return f"{device}  (USB location {location})" if location else f"{device}  (USB location unknown)"
 
 
-def report(config_file=None, device_list=None, find_apps=None):
+def report(config_file=None, device_list=None, find_apps=None, read_sensors=None):
     """The diagnose report, as a list of lines."""
     from serial.tools import list_ports
     lines = ["led_mon diagnose"]
@@ -75,6 +75,16 @@ def report(config_file=None, device_list=None, find_apps=None):
             lines.append(f"Framework Control:     {fc.path if fc else 'not found'}")
         except Exception as e:
             lines.append(f"Could not look for Open Hardware Monitor / Framework Control: {e}")
+    if read_sensors is None and platform_utils.IS_WINDOWS:
+        def read_sensors():
+            from led_mon import sensor_sources
+            return sensor_sources.diagnose_lines()
+    if read_sensors is not None:
+        lines.append("")
+        try:
+            lines += read_sensors()
+        except Exception as e:
+            lines.append(f"Could not read temperatures and fans: {e}")
     return lines
 
 
