@@ -33,5 +33,5 @@ def test_monitor_does_not_load_pynput_on_windows():
         from led_mon import led_system_monitor
     except Exception as e:
         pytest.skip(f"full dependencies not installed: {e}")
-    assert not led_system_monitor.PYNPUT_AVAILABLE
+    assert not hasattr(led_system_monitor, "PYNPUT_AVAILABLE")
     assert not any(name == "pynput" or name.startswith("pynput.") for name in sys.modules)
