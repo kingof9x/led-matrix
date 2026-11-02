@@ -266,21 +266,9 @@ def windows_readings():
     return current().readings()
 
 
-def psutil_named_temps():
-    """[(sensor name, C)] from psutil (Linux; psutil can't read sensors on Windows)."""
-    import psutil
-    named = []
-    for group, entries in (getattr(psutil, "sensors_temperatures", lambda: {})() or {}).items():
-        for i, entry in enumerate(entries):
-            if entry.current and entry.current > 0:
-                named.append((f"{group}: {entry.label or i + 1}", float(entry.current)))
-    return named
-
-
 def named_temps():
-    """[(sensor name, C)] on this computer: from the chosen source on Windows, psutil elsewhere."""
-    from led_mon.platform_utils import IS_WINDOWS
-    return windows_named_temps() if IS_WINDOWS else psutil_named_temps()
+    """[(sensor name, C)] on this computer, from the chosen source."""
+    return windows_named_temps()
 
 
 def windows_named_temps():

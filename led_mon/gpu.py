@@ -4,19 +4,11 @@
 # GPU, add up the utilization of every process on each engine type (3D, Copy, Video Decode, ...)
 # and report the busiest engine type. GPU names come from DXGI, matched by the adapter LUID that
 # appears in the counter instance names.
-# Linux: amdgpu's gpu_busy_percent in sysfs, and nvidia-smi for NVIDIA cards.
 
 # Built In Dependencies
-import os
 import re
-import glob
 import time
-import shutil
 import logging
-import subprocess
-
-# Internal Dependencies
-from led_mon.platform_utils import IS_WINDOWS, subprocess_flags
 
 log = logging.getLogger(__name__)
 
@@ -149,66 +141,10 @@ class WindowsGpuReader:
         return busiest_engines(values)
 
 
-#### Linux ####
-
-def _read(path):
-    try:
-        with open(path) as f:
-            return f.read().strip()
-    except OSError:
-        return None
-
-
-class LinuxGpuReader:
-    """amdgpu cards through sysfs, NVIDIA cards through nvidia-smi."""
-
-    def __init__(self):
-        self._nvidia_smi = shutil.which("nvidia-smi")
-
-    def _amd_cards(self):
-        cards = []
-        for busy in sorted(glob.glob("/sys/class/drm/card*/device/gpu_busy_percent")):
-            device = os.path.dirname(busy)
-            name = _read(os.path.join(device, "product_name"))
-            if not name:
-                card = os.path.basename(os.path.dirname(device))
-                name = f"AMD GPU ({card}, {os.path.basename(os.path.realpath(device))})"
-            cards.append((name, busy))
-        return cards
-
-    def _nvidia(self):
-        if not self._nvidia_smi:
-            return []
-        try:
-            out = subprocess.run([self._nvidia_smi, "--query-gpu=name,utilization.gpu",
-                                  "--format=csv,noheader,nounits"], capture_output=True, text=True,
-                                 timeout=2, creationflags=subprocess_flags()).stdout
-        except (OSError, subprocess.SubprocessError):
-            return []
-        rows = []
-        for line in out.splitlines():
-            name, _, value = line.rpartition(",")
-            try:
-                rows.append((name.strip(), float(value)))
-            except ValueError:
-                pass
-        return rows
-
-    def read_all(self):
-        """[(name, percent or None)]"""
-        rows = []
-        for name, busy in self._amd_cards():
-            value = _read(busy)
-            rows.append((name, float(value) if value and value.isdigit() else None))
-        rows += self._nvidia()
-        names = unique_names([name for name, _ in rows])
-        return [(name, value) for name, (_, value) in zip(names, rows)]
-
-
 #### Shared ####
 
 class GpuMonitor:
-    """GPU names and utilization (0.0-1.0), on either platform. Never raises."""
+    """GPU names and utilization (0.0-1.0). Never raises."""
 
     def __init__(self):
         self._reader = None
@@ -218,7 +154,7 @@ class GpuMonitor:
     def _get_reader(self):
         if self._reader is None and not self._failed:
             try:
-                self._reader = WindowsGpuReader() if IS_WINDOWS else LinuxGpuReader()
+                self._reader = WindowsGpuReader()
             except Exception as e:
                 log.warning(f"GPU utilization isn't available: {e}")
                 self._failed = True

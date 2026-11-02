@@ -1,15 +1,12 @@
 # Opening LED panel serial ports.
 #
-# On Linux several handles can be open on the same /dev/ttyACM* device, and the app relies on that
-# (the equalizer opens the panel a second time). Windows COM ports are exclusive, so there every
-# open() of the same port returns a handle onto one shared pyserial object, with writes serialised.
+# Windows COM ports are exclusive, but the app opens a panel more than once (the equalizer opens it a
+# second time), so every open() of the same port returns a handle onto one shared pyserial object,
+# with writes serialised.
 
 # Built In Dependencies
 import threading
 import logging
-
-# Internal Dependencies
-from led_mon.platform_utils import IS_WINDOWS
 
 # External Dependencies
 import serial # pyserial
@@ -92,9 +89,7 @@ def _release(entry):
 
 
 def open_port(port_name):
-    """Open an LED panel port. Shared on Windows, a plain pyserial object elsewhere."""
-    if not IS_WINDOWS:
-        return serial.Serial(port_name, BAUD_RATE)
+    """Open an LED panel port (shared with every other open of the same port)."""
     key = port_name.lower()
     with _ports_guard:
         entry = _ports.get(key)

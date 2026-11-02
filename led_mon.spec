@@ -1,14 +1,13 @@
 # -*- mode: python ; coding: utf-8 -*-
-# PyInstaller spec for Linux and Windows.
+# PyInstaller spec for Windows.
 #
 #   pyinstaller led_mon.spec                          one-dir build: dist/led_mon/
-#   LED_MON_ONEFILE=1 pyinstaller led_mon.spec        one-file build: dist/led_mon(.exe)  (portable exe on Windows)
+#   LED_MON_ONEFILE=1 pyinstaller led_mon.spec        one-file build: dist/led_mon.exe (portable exe)
 
 import os
 import sys
 from PyInstaller.utils.hooks import collect_data_files
 
-IS_WINDOWS = sys.platform == 'win32'
 ONEFILE = os.environ.get('LED_MON_ONEFILE', '') not in ('', '0')
 
 datas = [
@@ -37,52 +36,49 @@ hiddenimports = [
 
 icon = None
 version_info = None
-if IS_WINDOWS:
-    hiddenimports += [
-        'soundcard', 'pystray', 'pystray._win32', 'PIL', 'PIL.ImageTk', 'wmi', 'win32com', 'win32com.client', 'pythoncom',
-        'serial.tools.list_ports_windows', 'tzdata', 'win32pdh',
-    ]
-    # soundcard reads its C header at runtime; zoneinfo needs the tzdata database on Windows
-    datas += collect_data_files('soundcard') + collect_data_files('tzdata')
-    # Build the exe icon from the same drawing as the tray icon
-    sys.path.insert(0, os.path.abspath('.'))
-    from led_mon.tray import make_icon_image
-    os.makedirs('build', exist_ok=True)
-    icon = os.path.join('build', 'led_mon.ico')
-    make_icon_image(256).save(icon, sizes=[(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
-    # Version details shown in the exe's Properties; an exe without them looks more suspicious to scanners
-    import tomllib
-    from PyInstaller.utils.win32.versioninfo import (VSVersionInfo, FixedFileInfo, StringFileInfo, StringTable,
-                                                     StringStruct, VarFileInfo, VarStruct)
-    # A release build passes its version in LED_MON_VERSION; otherwise use the one in pyproject.toml
-    app_version = os.environ.get('LED_MON_VERSION', '').strip()
-    if not app_version:
-        with open('pyproject.toml', 'rb') as f:
-            app_version = tomllib.load(f)['project']['version']
-    import re
-    version_numbers = [int(n) for n in re.findall(r'\d+', app_version)]
-    version_tuple = tuple((version_numbers + [0] * 4)[:4])
-    version_info = VSVersionInfo(
-        ffi=FixedFileInfo(filevers=version_tuple, prodvers=version_tuple),
-        kids=[
-            StringFileInfo([StringTable('040904B0', [
-                StringStruct('CompanyName', 'led-matrix contributors'),
-                StringStruct('FileDescription', 'LED Matrix Monitor for the Framework 16'),
-                StringStruct('FileVersion', app_version),
-                StringStruct('InternalName', 'led_mon'),
-                StringStruct('LegalCopyright', 'MIT License'),
-                StringStruct('OriginalFilename', 'led_mon.exe'),
-                StringStruct('ProductName', 'LED Matrix Monitor'),
-                StringStruct('ProductVersion', app_version),
-            ])]),
-            VarFileInfo([VarStruct('Translation', [1033, 1200])]),
-        ],
-    )
-else:
-    hiddenimports += ['pynput', 'sounddevice', 'pulsectl']
+hiddenimports += [
+    'soundcard', 'pystray', 'pystray._win32', 'PIL', 'PIL.ImageTk', 'wmi', 'win32com', 'win32com.client', 'pythoncom',
+    'serial.tools.list_ports_windows', 'tzdata', 'win32pdh',
+]
+# soundcard reads its C header at runtime; zoneinfo needs the tzdata database on Windows
+datas += collect_data_files('soundcard') + collect_data_files('tzdata')
+# Build the exe icon from the same drawing as the tray icon
+sys.path.insert(0, os.path.abspath('.'))
+from led_mon.tray import make_icon_image
+os.makedirs('build', exist_ok=True)
+icon = os.path.join('build', 'led_mon.ico')
+make_icon_image(256).save(icon, sizes=[(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
+# Version details shown in the exe's Properties; an exe without them looks more suspicious to scanners
+import tomllib
+from PyInstaller.utils.win32.versioninfo import (VSVersionInfo, FixedFileInfo, StringFileInfo, StringTable,
+                                                 StringStruct, VarFileInfo, VarStruct)
+# A release build passes its version in LED_MON_VERSION; otherwise use the one in pyproject.toml
+app_version = os.environ.get('LED_MON_VERSION', '').strip()
+if not app_version:
+    with open('pyproject.toml', 'rb') as f:
+        app_version = tomllib.load(f)['project']['version']
+import re
+version_numbers = [int(n) for n in re.findall(r'\d+', app_version)]
+version_tuple = tuple((version_numbers + [0] * 4)[:4])
+version_info = VSVersionInfo(
+    ffi=FixedFileInfo(filevers=version_tuple, prodvers=version_tuple),
+    kids=[
+        StringFileInfo([StringTable('040904B0', [
+            StringStruct('CompanyName', 'led-matrix contributors'),
+            StringStruct('FileDescription', 'LED Matrix Monitor for the Framework 16'),
+            StringStruct('FileVersion', app_version),
+            StringStruct('InternalName', 'led_mon'),
+            StringStruct('LegalCopyright', 'MIT License'),
+            StringStruct('OriginalFilename', 'led_mon.exe'),
+            StringStruct('ProductName', 'LED Matrix Monitor'),
+            StringStruct('ProductVersion', app_version),
+        ])]),
+        VarFileInfo([VarStruct('Translation', [1033, 1200])]),
+    ],
+)
 
-# Windows uses registered hotkeys; keep pynput's keyboard hook out of the exe (antivirus flags it)
-excludes = ['pynput'] if IS_WINDOWS else []
+# The shortcuts use registered hotkeys; keep pynput's keyboard hook out of the exe (antivirus flags it)
+excludes = ['pynput']
 
 a = Analysis(
     ['main.py'],
@@ -106,8 +102,8 @@ exe_options = dict(
     strip=False,
     # No UPX: antivirus scanners treat UPX-packed executables as suspicious
     upx=False,
-    # Windows runs windowless with a tray icon; Linux stays a console app (systemd service)
-    console=not IS_WINDOWS,
+    # Runs windowless with a tray icon
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,

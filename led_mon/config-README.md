@@ -2,7 +2,7 @@
 
 Control the behavior of the app by settings in `config.yaml`. This file has default settings that are delivered as part of the codebase. To customise the behvaior, copy the settings to another file named `config-local.yaml` and make any desirfeed changes. If this file is present, it will be used instead of `config.yaml`.
 
-On Windows you can also use the layout editor (tray menu *Edit layout*) instead of editing this file; see the Windows section of the main `README.md`. It writes `config-local.yaml` for you.
+You can also use the layout editor (tray menu *Edit layout*) instead of editing this file; see the main `README.md`. It writes `config-local.yaml` for you.
 
 Configuration is specified for each of four quadrants, the top and bottom of the left and right LED Matrix panels. Each quadrant is a list containing one or more `app` items. These apps will be displayed in the quadrant in sequence, for a time specified by the `duration` parameter, cycling through the configured apps indefinitely.
 
@@ -29,8 +29,8 @@ Parameters specified in the global scope of the file apply to every app, unless 
 
 **duration**: default number of seconds each app is displayed.
 
-**left-port** / **right-port** (optional): pin the left or right panel to a serial port, such as `COM4` on Windows or `/dev/ttyACM0` on Linux, instead of detecting it automatically. Useful if the panels are detected in the wrong order. On Windows, the port names are shown in Device Manager under *Ports (COM & LPT)*.
+**left-port** / **right-port** (optional): pin the left or right panel to a serial port, such as `COM4`, instead of detecting it automatically. Useful if the panels are detected in the wrong order. The port names are shown in Device Manager under *Ports (COM & LPT)*.
 
 **left-location** / **right-location** (optional): pin the left or right panel to a USB position, such as `1-4.2`. Unlike a COM port number, this stays the same when Windows renumbers the ports. The layout editor's *Port* boxes save this setting. Run `led_mon --diagnose` to see each panel's USB position. If no panel is found at that position, the panel is detected automatically. If both a port and a location are set for the same side, the port is used.
 
-On Windows the config files live in `%APPDATA%\led_mon\` (the default `config.yaml` is copied there on first run).
+The config files live in `%APPDATA%\led_mon\` (the default `config.yaml` is copied there on first run).

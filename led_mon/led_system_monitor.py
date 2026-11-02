@@ -14,7 +14,7 @@ import logging
 
 # Internal Dependencies
 from led_mon import platform_utils
-from led_mon.platform_utils import IS_WINDOWS, IS_LINUX
+from led_mon.platform_utils import IS_WINDOWS
 # Load API keys before the plugins are imported (via drawing) and read them
 platform_utils.load_env_file()
 from led_mon.drawing import draw_outline_border, draw_ids, draw_id, DrawingThread
@@ -30,26 +30,6 @@ from led_mon import app_settings
 # External Dependencies
 import numpy as np
 from yaml import safe_load
-# evdev (direct keyboard device access) only exists on Linux; elsewhere only pynput is used
-if IS_LINUX:
-    import evdev
-    from evdev import ecodes
-else:
-    evdev = None
-    ecodes = None
-
-# Optional cross-platform keyboard input; on some Linux Wayland setups this may be unavailable.
-# Not used on Windows: pynput hooks every keystroke, which antivirus scanners flag as a keylogger,
-# so Windows uses registered hotkeys instead (led_mon/hotkeys.py).
-try:
-    if IS_WINDOWS:
-        raise ImportError("Windows uses registered hotkeys")
-    from pynput.keyboard import Key, Listener
-    PYNPUT_AVAILABLE = True
-except Exception:
-    Key = None
-    Listener = None
-    PYNPUT_AVAILABLE = False
 from serial.tools import list_ports
 
 log = logging.getLogger(__name__)
@@ -66,12 +46,6 @@ log.setLevel(log_level)
 
 is_frozen = platform_utils.is_frozen
 
-MODIFIER_KEYS = [('KEY_RIGHTALT', 100), ('KEY_LEFTALT', 56)]
-# Key press to show widget IDs
-KEY_I = ('KEY_I', 23)
-# Keypress to force advance to next widget without waiting for time slice to expire
-KEY_N = ('KEY_N', 49)
-# Used to ensure that advance to next widget from Alt-N keypress occurs only once until key is released and perssed again
 global freeze_app_switching
 freeze_app_switching = False
 
@@ -108,9 +82,9 @@ def active_preview():
     return None
 
 def request_next_app():
-    global evdev_next_key_pressed
+    global next_app_requested
     # One-shot flag, cleared by the main loop once the apps have advanced
-    evdev_next_key_pressed = True
+    next_app_requested = True
 
 def set_freeze(frozen):
     global freeze_app_switching
@@ -132,77 +106,13 @@ def set_paused(paused):
 def is_paused():
     return display_paused.is_set()
 
-# pynput key helpers: Windows reports left/right Alt as alt_l / alt_r (or alt_gr)
-def is_alt_key(key):
-    if Key is None:
-        return False
-    return key in tuple(getattr(Key, name) for name in ('alt', 'alt_l', 'alt_r', 'alt_gr') if hasattr(Key, name))
-
-def key_char(key):
-    char = getattr(key, 'char', None)
-    if char:
-        return char.lower()
-    # With Alt held, Windows may report only the virtual key code
-    vk = getattr(key, 'vk', None)
-    if vk is not None and 0x41 <= vk <= 0x5A:
-        return chr(vk).lower()
-    return None
-
-def find_keyboard_device():
-    """Auto-detect keyboard input device from /dev/input/event*"""
-    if evdev is None:
-        return None
-    try:
-        devices = [evdev.InputDevice(path) for path in evdev.list_devices()]
-        for device in devices:
-            # Look for devices with keyboard capabilities (EV_KEY with standard keys)
-            capabilities = device.capabilities(verbose=False)
-            if evdev.ecodes.EV_KEY in capabilities:
-                keys = capabilities[evdev.ecodes.EV_KEY]
-                # Check if device has typical keyboard keys (letters and modifiers)
-                has_letters = any(k in keys for k in range(evdev.ecodes.KEY_Q, evdev.ecodes.KEY_P + 1))
-                has_modifiers = any(k in keys for k in [evdev.ecodes.KEY_LEFTALT, evdev.ecodes.KEY_RIGHTALT])
-                if has_letters and has_modifiers:
-                    return device.path
-    except Exception as e:
-        log.warning(f"Warning: Could not auto-detect keyboard device: {e}")
-    return None
-
-def evcode_keyloop():
-    global freeze_app_switching, evdev_next_key_pressed
-    kbd_path = find_keyboard_device()
-    keys_pressed = set()
-    if kbd_path:
-        try:
-            device = evdev.InputDevice(kbd_path)
-            for event in device.read_loop():
-                if event.type == ecodes.EV_KEY:
-                    if event.value == 1:
-                        keys_pressed.add(event.code)
-                    elif event.value == 0:
-                        keys_pressed.discard(event.code)
-
-                    if (ecodes.KEY_LEFTALT in keys_pressed or ecodes.KEY_RIGHTALT in keys_pressed) and ecodes.KEY_F in keys_pressed:
-                        freeze_app_switching = True
-                    elif (ecodes.KEY_LEFTALT in keys_pressed or ecodes.KEY_RIGHTALT in keys_pressed) and ecodes.KEY_U in keys_pressed:
-                        freeze_app_switching = False
-
-                    if (ecodes.KEY_LEFTALT in keys_pressed or ecodes.KEY_RIGHTALT in keys_pressed) and ecodes.KEY_N in keys_pressed:
-                        evdev_next_key_pressed = True
-        except (PermissionError, FileNotFoundError, OSError) as e:
-            log.warning(f"Warning: Cannot access keyboard device {kbd_path}: {e}")
-                
-if evdev is not None:
-    Thread(target=evcode_keyloop, daemon=True).start()
-
-
 def get_config(args):
-    # Check for --config-file program arg first, and then CONFIG_FILE environment variable (used by NixOS module),
-    # then config-local.yaml / config.yaml (next to the app on Linux, in %APPDATA%\led_mon on Windows)
+    # Check for --config-file program arg first, and then CONFIG_FILE environment variable,
+    # then config-local.yaml / config.yaml in %APPDATA%\led_mon
     config_file = platform_utils.resolve_config_file(args.config_file)
     with open(config_file, 'r') as f:
         config = safe_load(f)
-    # Optional left-port / right-port (e.g. COM4 or /dev/ttyACM0) and left-location / right-location
+    # Optional left-port / right-port (e.g. COM4) and left-location / right-location
     # (USB position, e.g. 1-4.2) override panel auto-detection
     shared_state.set_overrides_from_config(config)
     return config
@@ -237,28 +147,7 @@ def list_apps(base_apps, plugin_apps, quads):
             print(f"{'plugin app'.ljust(12, ' ')if app in plugin_apps else 'base app'.ljust(12, ' ')}", end='')
             print(f"{_app}")
         
-device = None
-def app(args, base_apps, plugin_apps):    
-    # Initialize evdev device for key listening if not disabled
-    global device
-    if not args.no_key_listener and evdev is not None:
-        # Try to auto-detect keyboard device first
-        kbd_path = find_keyboard_device()
-        if kbd_path:
-            try:
-                device = evdev.InputDevice(kbd_path)
-                log.info(f"Using keyboard device: {kbd_path}")
-            except (PermissionError, FileNotFoundError, OSError) as e:
-                log.warning(f"Warning: Cannot access keyboard device {kbd_path}: {e}")
-                log.warning("Try running: sudo usermod -a -G input $USER (then log out and back in)")
-                log.warning("Or use --no-key-listener to disable keyboard monitoring.")
-                args.no_key_listener = True
-                device = None
-        else:
-            log.warning("Warning: Could not find a suitable keyboard device for evdev monitoring.")
-            log.warning("Key listening will be limited to pynput only (if available).")
-            device = None
-
+def app(args, base_apps, plugin_apps):
     ################################################################################
     ### Parse config file to enable control of apps by quadrant and by time slice ##
     ################################################################################
@@ -310,15 +199,8 @@ def app(args, base_apps, plugin_apps):
     locations = list(map(lambda x: x[0] or x[1], led_devices))
     drawing_queues = []
     
-    # Track key presses to reveal app ID in each quadrant or panel
-    global alt_pressed
-    alt_pressed = False
-    global i_pressed
-    i_pressed = False
-    global n_pressed
-    n_pressed = False
-    global evdev_next_key_pressed
-    evdev_next_key_pressed = False
+    global next_app_requested
+    next_app_requested = False
     
     # Set up monitors and brightness parameters
     min_background_brightness = 12
@@ -402,45 +284,6 @@ def app(args, base_apps, plugin_apps):
         except Exception as e:
             log.error(f"Error disposing suppressed app {app.get('name')} in {quadrant_name}: {e}")
     
-    def on_press(key):
-        global alt_pressed, i_pressed, n_pressed, freeze_app_switching
-        # If pynput is unavailable, this callback will not be used; guard anyway
-        if not PYNPUT_AVAILABLE:
-            return
-        try:
-            char = key_char(key)
-            if char == 'i':
-                i_pressed = True
-            elif char == 'n':
-                # Advance once per Alt+N press (matches the evdev listener), not on every loop while held
-                if alt_pressed and not n_pressed:
-                    request_next_app()
-                n_pressed = True
-            elif char == 'f' and alt_pressed:
-                freeze_app_switching = True
-            elif char == 'u' and alt_pressed:
-                freeze_app_switching = False
-            elif is_alt_key(key):
-                alt_pressed = True
-        except Exception:
-            # Be defensive; ignore unexpected pynput key objects
-            pass
-
-    def on_release(key):
-        global alt_pressed, i_pressed, n_pressed
-        if not PYNPUT_AVAILABLE:
-            return
-        try:
-            char = key_char(key)
-            if char == 'i':
-                i_pressed = False
-            elif char == 'n':
-                n_pressed = False
-            elif is_alt_key(key):
-                alt_pressed = False
-        except Exception:
-            pass
-        
     #################################################
     ###      Load app functions from plugins      ###
     #################################################
@@ -537,7 +380,7 @@ def app(args, base_apps, plugin_apps):
         control.serve(handle_control_request)
 
     def render_iteration(args):
-        global latch_key_combo, next_key_fired, freeze_app_switching, evdev_next_key_pressed
+        global latch_key_combo, next_key_fired, freeze_app_switching, next_app_requested
         nonlocal previewing, blanked
         try:
             if reload_config_event.is_set():
@@ -571,16 +414,11 @@ def app(args, base_apps, plugin_apps):
 
             grid = np.zeros((9,34), dtype = int)
             
-            # Check for key combo using both evdev (if available) and pynput
-            active_keys = device.active_keys(verbose=True) if device else []
-            evdev_id_key_pressed = True if (MODIFIER_KEYS[0] in active_keys or MODIFIER_KEYS[1] in active_keys) and KEY_I in active_keys and device else False
-            pynput_id_key_pressed = i_pressed and alt_pressed
-            id_key_combo_active = (evdev_id_key_pressed or pynput_id_key_pressed) and not args.no_key_listener
-            # Tray "Identify panels" works even with --no-key-listener
-            id_key_combo_active = id_key_combo_active or time.monotonic() < id_display_until
+            # App names are shown for a few seconds after Ctrl+Alt+Shift+I or the tray's "Identify panels"
+            id_key_combo_active = time.monotonic() < id_display_until
             shared_state.id_key_press_active = id_key_combo_active
-            # evdev_next_key_pressed is a one-shot flag set by the evdev listener, pynput Alt+N and the tray
-            next_key_combo_active = evdev_next_key_pressed
+            # One-shot flag set by Ctrl+Alt+Shift+N and the tray's "Next app"
+            next_key_combo_active = next_app_requested
 
             # Track when an app is changed in either panel, used to manage animation state
             idx_changed = {
@@ -628,7 +466,7 @@ def app(args, base_apps, plugin_apps):
                     should_advance = (now - base_time_map[quadrant][app['name']] >= int(app_duration[(quadrant, app['name'])])) or can_force_next
                     if should_advance and not freeze_app_switching:
                             if can_force_next:
-                                evdev_next_key_pressed = False
+                                next_app_requested = False
                             # Suppressed quadrants still rotate state, but should not
                             # trigger draw-side animation/dispose transitions.
                             if not suppressed_for_rotation:
@@ -761,10 +599,6 @@ def app(args, base_apps, plugin_apps):
             log.error(f"Error in main loop: {e}")
             time.sleep(1.0)
             
-    # Informative message if pynput is not available
-    if not PYNPUT_AVAILABLE and not IS_WINDOWS and not args.no_key_listener:
-        log.warning("Info: pynput is unavailable; running in evdev-only mode. Use Ctrl+C to exit.")
-
     def run_main_loop():
         platform_utils.init_com_for_thread()
         if IS_WINDOWS and not args.no_key_listener:
@@ -775,19 +609,8 @@ def app(args, base_apps, plugin_apps):
                 'f': lambda: set_freeze(True),
                 'u': lambda: set_freeze(False),
             })
-        # Prefer pynput if available; fall back silently if it fails to start (common on Wayland)
-        if PYNPUT_AVAILABLE and not args.no_key_listener:
-            try:
-                with Listener(on_press=on_press, on_release=on_release):
-                    while not shutdown_event.is_set():
-                        render_iteration(args)
-            except Exception as e:
-                log.error(f"Warning: pynput listener could not be started ({e}). Falling back to evdev-only mode.")
-                while not shutdown_event.is_set():
-                    render_iteration(args)
-        else:
-            while not shutdown_event.is_set():
-                render_iteration(args)
+        while not shutdown_event.is_set():
+            render_iteration(args)
 
     def shutdown():
         """Turn the panels dark, stop drawing and release both serial ports (tray Quit)."""

@@ -102,15 +102,6 @@ def test_source_names_come_from_where_the_temperatures_come_from(tmp_path):
     assert source.status()["sensors"] == ["APU"]
 
 
-def test_psutil_names(monkeypatch):
-    import psutil
-    entry = SimpleNamespace
-    monkeypatch.setattr(psutil, "sensors_temperatures", lambda: {
-        "k10temp": [entry(label="Tctl", current=50.0), entry(label="", current=0)],
-        "nvme": [entry(label="Composite", current=35.0)]}, raising=False)
-    assert sensor_sources.psutil_named_temps() == [("k10temp: Tctl", 50.0), ("nvme: Composite", 35.0)]
-
-
 # ---------------------------------------------------------------------------
 # How often sensors are read
 

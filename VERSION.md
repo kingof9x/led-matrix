@@ -2,19 +2,7 @@
 
 ## Current Version
 - **Version**: 2.1.2
-- **Branch**: pr/nixos-module-equalizer-hardening
 - **Date**: 2026-05-01
-
-## Usage with specific commit
-
-For reproducible builds, use the specific commit hash:
-
-```nix
-led-matrix-monitoring = {
-  url = "github:timoteuszelle/led-matrix/main";
-  inputs.nixpkgs.follows = "nixpkgs";
-};
-```
 
 ## Changelog
 ### v2.1.2 (2026-05-01)

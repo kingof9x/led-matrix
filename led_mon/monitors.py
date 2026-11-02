@@ -15,23 +15,6 @@ if os.name == 'nt':
     import wmi
 
 
-def _read_backlight_ratio(device):
-    """Return a normalized brightness in [0.0, 1.0] for the given backlight device."""
-    with open(f'/sys/class/backlight/{device}/max_brightness', 'r') as f:
-        max_b = int(f.read())
-    with open(f'/sys/class/backlight/{device}/brightness', 'r') as f:
-        b = int(f.read())
-
-    if max_b <= 0:
-        return 1.0
-
-    r = b / max_b
-    if r < 0.0:
-        return 0.0
-    if r > 1.0:
-        return 1.0
-    return r
-
 class DiskMonitor:
     def __init__(self, hysterisis_time = 20):
         self.read_usage_history = [0]
@@ -104,43 +87,13 @@ class NetworkMonitor:
             print(f"Error in NetworkMonitor.get(): {e}")
             return 0, 0
 
-def _linux_core_groups(logical_count):
-    """Logical CPUs grouped by physical core, from sysfs (AMD numbers a core's threads N and N+8, not N and N+1)."""
-    groups = []
-    seen = set()
-    for cpu in range(logical_count):
-        if cpu in seen:
-            continue
-        try:
-            with open(f'/sys/devices/system/cpu/cpu{cpu}/topology/thread_siblings_list') as f:
-                text = f.read().strip()
-        except OSError:
-            return None
-        members = set()
-        for part in text.split(','):
-            if '-' in part:
-                a, b = part.split('-')
-                members.update(range(int(a), int(b) + 1))
-            elif part:
-                members.add(int(part))
-        members = sorted(m for m in members if m < logical_count) or [cpu]
-        seen.update(members)
-        groups.append(members)
-    return groups
-
-
 def cpu_core_groups():
     """Indexes into psutil.cpu_percent(percpu=True), one list per physical core."""
     logical = psutil.cpu_count() or 1
     physical = psutil.cpu_count(logical=False) or logical
-    groups = None
-    if os.name != 'nt':
-        groups = _linux_core_groups(logical)
-    if not groups:
-        # Windows numbers a core's threads next to each other
-        per_core = max(1, logical // physical)
-        groups = [list(range(i, min(i + per_core, logical))) for i in range(0, logical, per_core)]
-    return groups
+    # Windows numbers a core's threads next to each other
+    per_core = max(1, logical // physical)
+    return [list(range(i, min(i + per_core, logical))) for i in range(0, logical, per_core)]
 
 
 class CPUMonitor:
@@ -217,11 +170,7 @@ class BatteryMonitor:
         battery = psutil.sensors_battery()
         if battery is not None:
             battery_percentage = battery.percent / 100.0
-            if os.name == "nt":
-                battery_plugged = battery.power_plugged
-            else:
-                bat_status = open('/sys/class/power_supply/BAT1/status', 'r').read().strip()
-                battery_plugged = (bat_status != 'Discharging')
+            battery_plugged = battery.power_plugged
             return battery_percentage, battery_plugged
 
 _wmi_brightness_cache = (0.0, 1.0)  # (monotonic time, value)
@@ -241,14 +190,7 @@ def _get_wmi_brightness():
 
 def get_monitor_brightness():
     try:
-        if os.name == 'nt':
-            return _get_wmi_brightness()
-        else:
-            # On Linux, use max_brightness to normalize into [0.0, 1.0]
-            try:
-                return _read_backlight_ratio('amdgpu_bl2')
-            except Exception:
-                return _read_backlight_ratio('amdgpu_bl1')
+        return _get_wmi_brightness()
     except Exception:
         # Reasonable default if anything goes wrong
         return 1.0

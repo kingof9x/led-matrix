@@ -3,10 +3,8 @@
 # Internal dependencies
 from led_mon.patterns import letters_small
 from led_mon import drawing
-from led_mon.platform_utils import IS_WINDOWS
 
 # External dependenciees
-import psutil
 import numpy as np
 
 # Reference for fractional measure of sensor temps (in degrees Celcius)
@@ -20,8 +18,8 @@ MAX_FAN_SPEED = 6_000
 class TemperatureMonitor:
     @staticmethod
     def named():
-        """[(sensor name, C)] for every sensor that has a reading, most important first. On Windows they come
-        from the source chosen in the layout editor (psutil can't read sensors there)."""
+        """[(sensor name, C)] for every sensor that has a reading, most important first, from the source
+        chosen in the layout editor (psutil can't read sensors on Windows)."""
         from led_mon.sensor_sources import named_temps
         return named_temps()
 
@@ -35,19 +33,11 @@ class TemperatureMonitor:
 class FanSpeedMonitor:
     @staticmethod
     def get():
-        if IS_WINDOWS:
-            from led_mon.sensor_sources import windows_readings
-            speeds = windows_readings()[1]
-            # Always two values, so missing readings draw empty bars
-            speeds = (list(speeds) + [0, 0])[:2]
-            return [min(1.0, s / MAX_FAN_SPEED) for s in speeds]
-        fans = psutil.sensors_fans()
-        speeds = []
-        for _, entries in fans.items():
-            for entry in entries:
-                speeds.append(entry.current)
-        # We can handle up to two fan speeds on the matrix display
-        return list(map(lambda x: x / MAX_FAN_SPEED, speeds))[:2]
+        from led_mon.sensor_sources import windows_readings
+        speeds = windows_readings()[1]
+        # Always two values, so missing readings draw empty bars
+        speeds = (list(speeds) + [0, 0])[:2]
+        return [min(1.0, s / MAX_FAN_SPEED) for s in speeds]
     
 temperature_monitor = TemperatureMonitor()
 fan_speed_monitor = FanSpeedMonitor()

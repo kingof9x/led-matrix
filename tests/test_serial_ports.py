@@ -32,7 +32,6 @@ class FakeSerial:
 @pytest.fixture(autouse=True)
 def windows_ports(monkeypatch):
     FakeSerial.open_ports = set()
-    monkeypatch.setattr(serial_ports, "IS_WINDOWS", True)
     monkeypatch.setattr(serial_ports.serial, "Serial", FakeSerial)
     yield
     serial_ports.close_all()
